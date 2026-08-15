@@ -1,17 +1,19 @@
+import csv
 import json
 import re
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
-RTO_DB_PATH = BASE_DIR / "data" / "rto_database.json"
+RTO_DB_JSON = BASE_DIR / "data" / "rto_database.json"
+RTO_DB_CSV = BASE_DIR / "data" / "rto_database.csv"
 
 # State Code to State Name Fallback Lookup
 STATE_NAMES = {
-  "AN": "Andaman & Nicobar", "AP": "Andhra Pradesh", "AR": "Arunachal Pradesh",
+  "AN": "Andaman and Nicobar Islands", "AP": "Andhra Pradesh", "AR": "Arunachal Pradesh",
   "AS": "Assam", "BR": "Bihar", "CG": "Chhattisgarh", "CH": "Chandigarh",
-  "DD": "Daman & Diu", "DL": "Delhi", "DN": "Dadra & Nagar Haveli",
+  "DD": "Daman and Diu", "DL": "Delhi", "DN": "Dadra and Nagar Haveli",
   "GA": "Goa", "GJ": "Gujarat", "HR": "Haryana", "HP": "Himachal Pradesh",
-  "JH": "Jharkhand", "JK": "Jammu & Kashmir", "KA": "Karnataka", "KL": "Kerala",
+  "JH": "Jharkhand", "JK": "Jammu and Kashmir", "KA": "Karnataka", "KL": "Kerala",
   "LA": "Ladakh", "LD": "Lakshadweep", "MH": "Maharashtra", "ML": "Meghalaya",
   "MN": "Manipur", "MP": "Madhya Pradesh", "MZ": "Mizoram", "NL": "Nagaland",
   "OD": "Odisha", "PB": "Punjab", "PY": "Puducherry", "RJ": "Rajasthan",
@@ -21,22 +23,41 @@ STATE_NAMES = {
 
 class RTOLookupEngine:
     def __init__(self, db_path=None):
-        self.db_path = Path(db_path) if db_path else RTO_DB_PATH
+        self.db_path = Path(db_path) if db_path else RTO_DB_JSON
         self.rto_map = {}
         self._load_database()
 
     def _load_database(self):
-        """Loads RTO JSON dataset into lookup map."""
-        if self.db_path.exists():
+        """Loads 1000+ RTO dataset records from JSON or CSV into lookup map."""
+        if RTO_DB_JSON.exists():
             try:
-                with open(self.db_path, 'r', encoding='utf-8') as f:
+                with open(RTO_DB_JSON, 'r', encoding='utf-8') as f:
                     records = json.load(f)
                     for item in records:
                         prefix = item.get("registration_prefix", "").upper()
                         if prefix:
                             self.rto_map[prefix] = item
+                return
             except Exception as e:
-                print(f"[RTOLookup] Error loading database: {e}")
+                print(f"[RTOLookup] Error loading JSON database: {e}")
+
+        if RTO_DB_CSV.exists():
+            try:
+                with open(RTO_DB_CSV, 'r', encoding='utf-8') as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        prefix = row.get("registration_prefix", "").strip().upper()
+                        if prefix:
+                            self.rto_map[prefix] = {
+                                "state_code": row.get("state_code", "").strip(),
+                                "state_name": row.get("state_name", "").strip(),
+                                "rto_code": row.get("rto_code", "").strip(),
+                                "full_rto_code": row.get("full_rto_code", "").strip(),
+                                "registration_prefix": prefix,
+                                "city": row.get("city", "").strip()
+                            }
+            except Exception as e:
+                print(f"[RTOLookup] Error loading CSV database: {e}")
 
     def lookup(self, plate_text: str):
         """
@@ -75,7 +96,6 @@ class RTOLookupEngine:
         regex_match = re.match(r'^([A-Z]{2}\d{1,2})', clean)
         if regex_match:
             code = regex_match.group(1)
-            # Try padded 2-digit code e.g. MP9 -> MP09
             state_st = code[:2]
             num_st = code[2:]
             padded_code = f"{state_st}{int(num_st):02d}" if num_st.isdigit() else code
