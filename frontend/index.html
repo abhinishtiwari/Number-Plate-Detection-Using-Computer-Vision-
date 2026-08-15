@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Number Plate Detection AI</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-container">
+    <header class="app-header">
+      <div class="logo-icon">🚗</div>
+      <h1>Number Plate Detection</h1>
+      <p class="subtitle">Automatic License Plate Recognition (ALPR) powered by OpenCV & Tesseract OCR</p>
+    </header>
+
+    <main class="main-content">
+      <div class="card upload-card">
+        <div class="drop-zone" id="dropZone">
+          <div class="upload-icon">📷</div>
+          <p class="drop-title">Upload a Vehicle Image</p>
+          <p class="drop-subtitle">Drag & drop your image here, or click to browse</p>
+          
+          <div class="button-group">
+            <label for="fileInput" class="btn btn-secondary">
+              📁 Choose File
+            </label>
+            <input type="file" id="fileInput" accept="image/*" class="file-input">
+            
+            <label for="cameraInput" class="btn btn-secondary">
+              📸 Take Photo
+            </label>
+            <input type="file" id="cameraInput" accept="image/*" capture="environment" class="file-input">
+          </div>
+          <span class="file-name" id="fileNameDisplay">No file selected</span>
+        </div>
+
+        <button id="detectBtn" class="btn btn-primary" disabled>
+          🔍 Detect Number Plate
+        </button>
+      </div>
+
+      <!-- Status & Cold Start Banner -->
+      <div id="statusBox" class="status-box hidden">
+        <div id="spinner" class="spinner hidden"></div>
+        <p id="statusMessage" class="status-message"></p>
+      </div>
+
+      <!-- Result Card -->
+      <div id="resultCard" class="card result-card hidden">
+        <h2 class="section-title">Detection Output</h2>
+        <div class="canvas-wrapper">
+          <canvas id="resultCanvas"></canvas>
+        </div>
+
+        <div id="resultsTable" class="results-table-container">
+          <!-- Dynamically populated plate results -->
+        </div>
+      </div>
+    </main>
+
+    <footer class="app-footer">
+      <p>Split Architecture AI Demo — Frontend on <strong>Vercel</strong> | Backend on <strong>Render</strong></p>
+    </footer>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
