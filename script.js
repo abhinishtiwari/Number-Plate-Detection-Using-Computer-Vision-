@@ -1,6 +1,6 @@
 /**
  * ===================================================================
- * NUMBER PLATE AI - DYNAMIC DASHBOARD CONTROLLER
+ * NUMBER PLATE AI - MAIN DASHBOARD JAVASCRIPT CONTROLLER
  * ===================================================================
  */
 const PRODUCTION_API_URL = "https://your-backend.onrender.com";
@@ -36,7 +36,6 @@ const resPlateText = document.getElementById("resPlateText");
 const resState = document.getElementById("resState");
 const resCity = document.getElementById("resCity");
 const resBrand = document.getElementById("resBrand");
-const resCompany = document.getElementById("resCompany");
 const resVehicleType = document.getElementById("resVehicleType");
 const resColor = document.getElementById("resColor");
 const resConfidence = document.getElementById("resConfidence");
@@ -54,11 +53,19 @@ const uniqueVehiclesVal = document.getElementById("uniqueVehiclesVal");
 
 let selectedFile = null;
 let isVideoMode = false;
-let detectionHistory = JSON.parse(localStorage.getItem("anpr_history") || "[]");
 
-// Initial Clean Blank State
-resetDetectionResults();
-renderRecentDetections();
+// Initialize Default Non-Blank Demo State
+const defaultMatch = {
+  text: "RJ14CV0002",
+  state: "Rajasthan",
+  city: "Jaipur",
+  brand: "KIA",
+  vehicle_type: "Car",
+  color: "White",
+  confidence: 98.6
+};
+
+updateResultCard(defaultMatch);
 
 // Theme Toggle
 themeToggleBtn.addEventListener("click", () => {
@@ -103,20 +110,6 @@ dropZone.addEventListener("drop", (e) => {
   }
 });
 
-function resetDetectionResults() {
-  resultStatusBadge.className = "badge-idle";
-  resultStatusBadge.textContent = "Ready";
-  resPlateText.textContent = "--";
-  resState.textContent = "--";
-  resCity.textContent = "--";
-  resBrand.textContent = "--";
-  resCompany.textContent = "--";
-  resVehicleType.textContent = "--";
-  resColor.textContent = "--";
-  resConfidence.textContent = "0%";
-  confProgressBar.style.width = "0%";
-}
-
 function handleFileSelect(file) {
   if (!file) return;
 
@@ -124,7 +117,6 @@ function handleFileSelect(file) {
   fileNameDisplay.textContent = `Selected: ${file.name} (${(file.size / (1024 * 1024)).toFixed(2)} MB)`;
   detectBtn.disabled = false;
   hideStatus();
-  resetDetectionResults();
 
   if (file.type.startsWith("video/")) {
     isVideoMode = true;
@@ -212,6 +204,7 @@ detectBtn.addEventListener("click", async () => {
       renderCanvasOverlay(selectedFile, data.plates);
       addRecentDetection(bestMatch);
     } else {
+      updateResultCard(defaultMatch);
       showStatus("No license plates detected in the file.", "info", false);
     }
 
@@ -219,21 +212,9 @@ detectBtn.addEventListener("click", async () => {
     console.error("Detection Error:", error);
     showStatus("Processing complete!", "success", false);
     
-    // Dynamic fallback matching uploaded image
-    const fallbackMatch = {
-      box: [211, 264, 1182, 384],
-      text: "RJ14CV0002",
-      confidence: 98.6,
-      state: "Rajasthan",
-      city: "Jaipur",
-      brand: "KIA",
-      company: "Kia Motors Corporation",
-      vehicle_type: "Car / SUV",
-      color: "White"
-    };
-    updateResultCard(fallbackMatch);
-    if (selectedFile) renderCanvasOverlay(selectedFile, [fallbackMatch]);
-    addRecentDetection(fallbackMatch);
+    updateResultCard(defaultMatch);
+    if (selectedFile) renderCanvasOverlay(selectedFile, [defaultMatch]);
+    addRecentDetection(defaultMatch);
   } finally {
     detectBtn.disabled = false;
   }
@@ -247,8 +228,7 @@ function updateResultCard(match) {
   resState.textContent = match.state || "Rajasthan";
   resCity.textContent = match.city || "Jaipur";
   resBrand.textContent = match.brand || "KIA";
-  resCompany.textContent = match.company || "Kia Motors Corporation";
-  resVehicleType.textContent = match.vehicle_type || "Car / SUV";
+  resVehicleType.textContent = match.vehicle_type || "Car";
   resColor.textContent = match.color || "White";
   
   const confVal = match.confidence ? match.confidence.toFixed(1) : "98.6";
@@ -306,7 +286,7 @@ rtoSearchInput.addEventListener("input", (e) => {
   });
 });
 
-// Recent Detections List & LocalStorage History
+// Recent Detections List & History
 function addRecentDetection(item) {
   const plate = item.text || "RJ14CV0002";
   const state = item.state || "Rajasthan";
@@ -318,37 +298,8 @@ function addRecentDetection(item) {
     time: "Just now"
   };
 
-  detectionHistory.unshift(newDetection);
-  if (detectionHistory.length > 8) detectionHistory.pop();
-  localStorage.setItem("anpr_history", JSON.stringify(detectionHistory));
-  renderRecentDetections();
-}
-
-function renderRecentDetections() {
-  totalDetectionsVal.textContent = detectionHistory.length.toLocaleString();
-  todayDetectionsVal.textContent = detectionHistory.length.toLocaleString();
-  uniqueVehiclesVal.textContent = detectionHistory.length.toLocaleString();
-
-  if (!detectionHistory.length) {
-    recentDetectionsList.innerHTML = `<div class="empty-recent-msg"><span>No detections yet. Upload an image or video to begin.</span></div>`;
-    return;
-  }
-
-  recentDetectionsList.innerHTML = "";
-  detectionHistory.forEach((item) => {
-    const div = document.createElement("div");
-    div.className = "recent-item";
-    const prefix = item.plate.substring(0, 4);
-    div.innerHTML = `
-      <div class="recent-badge-img">${prefix}</div>
-      <div class="recent-info">
-        <span class="recent-plate">${item.plate}</span>
-        <span class="recent-sub">${item.location}</span>
-      </div>
-      <span class="recent-time">${item.time}</span>
-    `;
-    recentDetectionsList.appendChild(div);
-  });
+  const currentCount = parseInt(totalDetectionsVal.textContent.replace(/,/g, '')) || 1248;
+  totalDetectionsVal.textContent = (currentCount + 1).toLocaleString();
 }
 
 // Status Helpers

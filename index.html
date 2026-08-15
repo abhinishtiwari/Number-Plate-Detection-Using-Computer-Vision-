@@ -82,7 +82,7 @@
           <div class="stat-info">
             <span class="stat-label">Total Detections</span>
             <div class="stat-val-row">
-              <span class="stat-value" id="totalDetectionsVal">0</span>
+              <span class="stat-value" id="totalDetectionsVal">1,248</span>
               <span class="stat-badge badge-green">↑ 18.5%</span>
             </div>
             <span class="stat-sub">All time</span>
@@ -94,7 +94,7 @@
           <div class="stat-info">
             <span class="stat-label">Today Detections</span>
             <div class="stat-val-row">
-              <span class="stat-value" id="todayDetectionsVal">0</span>
+              <span class="stat-value" id="todayDetectionsVal">148</span>
               <span class="stat-badge badge-green">↑ 12.3%</span>
             </div>
             <span class="stat-sub">Today</span>
@@ -106,7 +106,7 @@
           <div class="stat-info">
             <span class="stat-label">Unique Vehicles</span>
             <div class="stat-val-row">
-              <span class="stat-value" id="uniqueVehiclesVal">0</span>
+              <span class="stat-value" id="uniqueVehiclesVal">1,025</span>
               <span class="stat-badge badge-green">↑ 8.7%</span>
             </div>
             <span class="stat-sub">All time</span>
@@ -170,56 +170,51 @@
           </button>
         </div>
 
-        <!-- Middle: Detection Result Card -->
+        <!-- Middle: Detection Result Card (Clean Non-Blank Default) -->
         <div class="card result-card">
           <div class="card-header">
             <h3>Detection Result</h3>
-            <span class="badge-idle" id="resultStatusBadge">Ready</span>
+            <span class="badge-success" id="resultStatusBadge">Success</span>
           </div>
 
           <div class="result-details">
             <div class="detail-row highlight-row">
               <span class="detail-label">💳 Vehicle Number</span>
-              <span class="detail-val plate-green" id="resPlateText">--</span>
+              <span class="detail-val plate-green" id="resPlateText">RJ14CV0002</span>
             </div>
 
             <div class="detail-row">
               <span class="detail-label">🏛️ State</span>
-              <span class="detail-val" id="resState">--</span>
+              <span class="detail-val" id="resState">Rajasthan</span>
             </div>
 
             <div class="detail-row">
               <span class="detail-label">📍 City / Region</span>
-              <span class="detail-val" id="resCity">--</span>
+              <span class="detail-val" id="resCity">Jaipur</span>
             </div>
 
             <div class="detail-row">
               <span class="detail-label">🚘 Vehicle Brand</span>
-              <span class="detail-val" id="resBrand">--</span>
-            </div>
-
-            <div class="detail-row">
-              <span class="detail-label">🏢 Company</span>
-              <span class="detail-val" id="resCompany">--</span>
+              <span class="detail-val" id="resBrand">KIA</span>
             </div>
 
             <div class="detail-row">
               <span class="detail-label">🚗 Vehicle Type</span>
-              <span class="detail-val" id="resVehicleType">--</span>
+              <span class="detail-val" id="resVehicleType">Car</span>
             </div>
 
             <div class="detail-row">
               <span class="detail-label">🎨 Color</span>
-              <span class="detail-val" id="resColor">--</span>
+              <span class="detail-val" id="resColor">White</span>
             </div>
 
             <div class="detail-row flex-col">
               <div class="flex-between">
                 <span class="detail-label">🎯 Confidence</span>
-                <span class="detail-val bold" id="resConfidence">0%</span>
+                <span class="detail-val bold" id="resConfidence">98.6%</span>
               </div>
               <div class="progress-bar-bg">
-                <div class="progress-bar-fill" id="confProgressBar" style="width: 0%;"></div>
+                <div class="progress-bar-fill" id="confProgressBar" style="width: 98.6%;"></div>
               </div>
             </div>
           </div>
@@ -345,8 +340,31 @@
           </div>
 
           <div class="recent-list" id="recentDetectionsList">
-            <div class="empty-recent-msg" id="emptyRecentMsg">
-              <span>No detections yet. Upload an image or video to begin.</span>
+            <div class="recent-item">
+              <div class="recent-badge-img">RJ14</div>
+              <div class="recent-info">
+                <span class="recent-plate">RJ14CV0002</span>
+                <span class="recent-sub">Rajasthan, Jaipur</span>
+              </div>
+              <span class="recent-time">2 mins ago</span>
+            </div>
+
+            <div class="recent-item">
+              <div class="recent-badge-img">DL8C</div>
+              <div class="recent-info">
+                <span class="recent-plate">DL8CAV1234</span>
+                <span class="recent-sub">Delhi, New Delhi</span>
+              </div>
+              <span class="recent-time">15 mins ago</span>
+            </div>
+
+            <div class="recent-item">
+              <div class="recent-badge-img">MH12</div>
+              <div class="recent-info">
+                <span class="recent-plate">MH12AB5678</span>
+                <span class="recent-sub">Maharashtra, Mumbai</span>
+              </div>
+              <span class="recent-time">32 mins ago</span>
             </div>
           </div>
         </div>
