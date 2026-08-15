@@ -1,11 +1,19 @@
 /**
  * ===================================================================
- * API CONFIGURATION
+ * API CONFIGURATION WITH LOCALHOST AUTO-DETECTION
  * ===================================================================
- * Change the API_URL constant below to point to your deployed Render backend URL.
- * Example: const API_URL = "https://number-plate-backend.onrender.com";
+ * Auto-detects local development (http://127.0.0.1:8000) when running locally.
+ * Set your production Render URL in the fallback string below when deploying.
  */
-const API_URL = "https://your-backend.onrender.com";
+const PRODUCTION_API_URL = "https://your-backend.onrender.com";
+
+const API_URL = (
+  window.location.hostname === "localhost" ||
+  window.location.hostname === "127.0.0.1" ||
+  window.location.protocol === "file:"
+) ? "http://127.0.0.1:8000" : PRODUCTION_API_URL;
+
+console.log("[ANPR] Connected to API server:", API_URL);
 
 // DOM Elements
 const fileInput = document.getElementById("fileInput");
@@ -58,11 +66,10 @@ function handleFileSelect(file) {
 
 /**
  * Polls the backend health check endpoint GET /health until the server is awake.
- * Handles Render free-tier cold starts (spins down after inactivity, takes 30-60s to boot).
  */
 async function waitForBackendServer(maxWaitSeconds = 60) {
   const startTime = Date.now();
-  showStatus("Waking up the detection server — this can take up to a minute on first use...", "info", true);
+  showStatus("Checking detection server connection...", "info", true);
 
   while ((Date.now() - startTime) / 1000 < maxWaitSeconds) {
     try {
@@ -74,12 +81,12 @@ async function waitForBackendServer(maxWaitSeconds = 60) {
         }
       }
     } catch (err) {
-      // Backend is still spinning up or cold starting, retry after delay
+      // Retry
     }
-    await new Promise((resolve) => setTimeout(resolve, 3000));
+    await new Promise((resolve) => setTimeout(resolve, 2000));
   }
 
-  throw new Error("Server wakeup timed out. Please try again.");
+  throw new Error("Server connection timed out. Please ensure backend is running.");
 }
 
 /**
@@ -92,7 +99,7 @@ detectBtn.addEventListener("click", async () => {
   resultCard.classList.add("hidden");
 
   try {
-    // Step 1: Ensure backend server is awake (handles Render cold start)
+    // Step 1: Ensure backend server is awake
     await waitForBackendServer(60);
 
     // Step 2: Call detection endpoint POST /detect
@@ -118,7 +125,7 @@ detectBtn.addEventListener("click", async () => {
 
   } catch (error) {
     console.error("Detection Error:", error);
-    showStatus("Couldn't reach the detection server or processing failed. Please try again.", "error", false);
+    showStatus("Couldn't reach the detection server. Please start the backend server at http://127.0.0.1:8000.", "error", false);
   } finally {
     detectBtn.disabled = false;
   }

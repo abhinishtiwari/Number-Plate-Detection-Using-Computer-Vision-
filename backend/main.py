@@ -15,7 +15,7 @@ app = FastAPI(title="Number Plate Detection API")
 # Enable CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins for local & Vercel deployment
+    allow_origins=["*"],  # Allows all origins for local & Vercel/GitHub Pages deployment
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -28,6 +28,20 @@ CASCADE_PATH = BASE_DIR / "cascades" / "haarcascade_russian_plate_number.xml"
 plate_cascade = None
 if CASCADE_PATH.exists():
     plate_cascade = cv2.CascadeClassifier(str(CASCADE_PATH))
+
+# Lazy-loaded EasyOCR reader instance
+easyocr_reader = None
+
+def get_easyocr_reader():
+    """Initializes EasyOCR reader on demand if available."""
+    global easyocr_reader
+    if easyocr_reader is None:
+        try:
+            import easyocr
+            easyocr_reader = easyocr.Reader(['en'], gpu=False)
+        except Exception:
+            pass
+    return easyocr_reader
 
 
 @app.get("/health")
@@ -50,10 +64,10 @@ def preprocess_roi(roi: np.ndarray) -> np.ndarray:
     else:
         gray = roi
 
-    # Resize ROI for better OCR resolution if too small
+    # Resize ROI for better OCR resolution
     height, width = gray.shape
-    if height < 60 or width < 120:
-        gray = cv2.resize(gray, (max(width * 2, 120), max(height * 2, 60)), interpolation=cv2.INTER_CUBIC)
+    if height < 80 or width < 160:
+        gray = cv2.resize(gray, (max(width * 2, 200), max(height * 2, 80)), interpolation=cv2.INTER_CUBIC)
 
     # Bilateral filter to smooth noise while preserving character edges
     filtered = cv2.bilateralFilter(gray, 11, 17, 17)
@@ -65,9 +79,28 @@ def preprocess_roi(roi: np.ndarray) -> np.ndarray:
 
 
 def run_ocr(roi: np.ndarray) -> str:
-    """Runs PyTesseract OCR on plate ROI with fallback handling."""
+    """
+    Runs multi-engine OCR (EasyOCR -> PyTesseract -> Heuristic Fallback)
+    to extract license plate alphanumeric text.
+    """
+    # 1. EasyOCR (Deep Learning Engine - Works without system Tesseract binary)
+    reader = get_easyocr_reader()
+    if reader is not None:
+        try:
+            ocr_results = reader.readtext(roi)
+            extracted_parts = []
+            for (bbox, text, prob) in ocr_results:
+                cleaned = clean_text(text)
+                if len(cleaned) >= 2:
+                    extracted_parts.append(cleaned)
+            if extracted_parts:
+                return "".join(extracted_parts)
+        except Exception:
+            pass
+
+    # 2. PyTesseract OCR Engine
     thresh = preprocess_roi(roi)
-    config = r'--oem 3 --psm 8 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    config = r'--oem 3 --psm 7 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
 
     try:
         raw_text = pytesseract.image_to_string(thresh, config=config)
@@ -77,7 +110,7 @@ def run_ocr(roi: np.ndarray) -> str:
     except Exception:
         pass
 
-    # Secondary attempt on raw grayscale
+    # 3. Secondary PyTesseract on raw ROI
     try:
         raw_text = pytesseract.image_to_string(roi, config=config)
         cleaned = clean_text(raw_text)
@@ -135,11 +168,11 @@ async def detect_plate(file: UploadFile = File(...)):
             aspect_ratio = float(w) / h if h > 0 else 0
             if 2.0 <= aspect_ratio <= 6.5:
                 detected_boxes.append((int(x), int(y), int(w), int(h)))
-                break  # Pick top match
+                break
 
     results = []
     for (x, y, w, h) in detected_boxes:
-        # Extract ROI with slight safety margin
+        # Extract ROI with safety margin
         margin_x = int(w * 0.05)
         margin_y = int(h * 0.05)
 
