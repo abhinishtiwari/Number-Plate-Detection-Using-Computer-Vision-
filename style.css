@@ -21,6 +21,8 @@
   --badge-green-text: #4ade80;
   --badge-purple-bg: rgba(139, 92, 246, 0.2);
   --badge-purple-text: #c084fc;
+  --badge-idle-bg: rgba(148, 163, 184, 0.15);
+  --badge-idle-text: #94a3b8;
   
   --radius-xl: 18px;
   --radius-lg: 14px;
@@ -186,6 +188,16 @@ body {
   padding: 4px 10px;
   border-radius: 8px;
   border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.badge-idle {
+  background-color: var(--badge-idle-bg);
+  color: var(--badge-idle-text);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--card-border);
 }
 
 /* App Layout */
@@ -734,6 +746,13 @@ body {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.empty-recent-msg {
+  padding: 24px;
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--text-muted);
 }
 
 .recent-item {
