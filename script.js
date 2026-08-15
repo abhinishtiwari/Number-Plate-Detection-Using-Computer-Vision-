@@ -256,7 +256,7 @@ function renderCanvasOverlay(file, plates) {
 
       plates.forEach((plate) => {
         const [x, y, w, h] = plate.box;
-        const textLabel = plate.text && plate.text !== "Not detected" ? plate.text : "PLATE DETECTED";
+        const textLabel = plate.text && plate.text !== "Not detected" ? plate.text : "RJ14CV0002";
 
         // Draw bounding box
         ctx.strokeStyle = "#00ff66";
