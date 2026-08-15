@@ -1,6 +1,6 @@
 /**
  * ===================================================================
- * NUMBER PLATE AI - REAL LOCAL COMPUTER VISION DASHBOARD
+ * NUMBER PLATE AI - REAL DYNAMIC COMPUTER VISION DASHBOARD
  * ===================================================================
  */
 const PRODUCTION_API_URL = "https://your-backend.onrender.com";
@@ -52,7 +52,7 @@ const uniqueVehiclesVal = document.getElementById("uniqueVehiclesVal");
 
 let selectedFile = null;
 let isVideoMode = false;
-let detectionHistory = JSON.parse(localStorage.getItem("anpr_history_v2") || "[]");
+let detectionHistory = JSON.parse(localStorage.getItem("anpr_history_v3") || "[]");
 
 // Initial Clean Idle State
 resetDetectionResults();
@@ -256,7 +256,7 @@ function renderCanvasOverlay(file, plates) {
 
       plates.forEach((plate) => {
         const [x, y, w, h] = plate.box;
-        const textLabel = plate.text && plate.text !== "Not detected" ? plate.text : "RJ14CV0002";
+        const textLabel = (plate.text && plate.text !== "Not detected") ? plate.text : "PLATE DETECTED";
 
         // Draw bounding box
         ctx.strokeStyle = "#00ff66";
@@ -307,7 +307,7 @@ function addRecentDetection(item) {
 
   detectionHistory.unshift(newDetection);
   if (detectionHistory.length > 10) detectionHistory.pop();
-  localStorage.setItem("anpr_history_v2", JSON.stringify(detectionHistory));
+  localStorage.setItem("anpr_history_v3", JSON.stringify(detectionHistory));
   renderRecentDetections();
 }
 
@@ -345,7 +345,7 @@ if (clearHistoryBtn) {
   clearHistoryBtn.addEventListener("click", (e) => {
     e.preventDefault();
     detectionHistory = [];
-    localStorage.removeItem("anpr_history_v2");
+    localStorage.removeItem("anpr_history_v3");
     renderRecentDetections();
   });
 }
