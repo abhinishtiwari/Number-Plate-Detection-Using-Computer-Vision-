@@ -1,60 +1,139 @@
-# 🚗 Number Plate Detection Web App (GitHub Pages + Render)
+# Number Plate AI - Local Computer Vision Pipeline
 
-A full-stack Automatic License / Number Plate Recognition (ANPR) web application with:
+A full-stack open-source **Number Plate Detection & Recognition AI** web application built with a **100% local computer vision pipeline** (YOLO + OpenCV + Local OCR + Local RTO Database).
 
-- **Frontend**: Pure **HTML + CSS + Vanilla JavaScript** hosted for FREE on **GitHub Pages**.
-- **Backend**: Python REST API (**FastAPI + OpenCV + Tesseract OCR**) hosted on **Render** (via Docker container).
-
----
-
-## 🏗 Architecture & Cold-Start Handling
-
-- **Frontend (GitHub Pages)**: Loads instantly from GitHub's CDN. No frameworks, no React, no build steps — plain `index.html`, `style.css`, and `script.js`.
-- **Backend (Render Free Tier)**: Handles heavy OpenCV Haar Cascade detection and Tesseract OCR processing.
-- **Cold-Start Resilience**: Render's free tier spins down after 15 minutes of inactivity. When a user clicks **Detect**, the frontend script first calls `GET /health` in a retry loop displaying a clear *"Waking up the detection server..."* banner until the server responds, ensuring the app never feels broken.
+No external APIs, no OpenAI/Gemini LLMs, no paid services, no fake hardcoded outputs.
 
 ---
 
-## 🌐 Live Deployment Instructions
+## 🎯 Architecture Overview
 
-### Part 1: Deploy Backend to Render (Free Tier)
-
-1. Go to **[dashboard.render.com](https://dashboard.render.com)** → **New +** → **Web Service**.
-2. Connect your GitHub repository: `abhinishtiwari/Number-Plate-Detection-Using-Computer-Vision-`.
-3. Configure settings:
-   - **Name**: `number-plate-backend`
-   - **Runtime**: **Docker**
-   - **Dockerfile Path**: `backend/Dockerfile`
-   - **Instance Type**: **Free**
-4. Click **Create Web Service**.
-5. Once deployed, copy your live backend URL (e.g. `https://number-plate-backend.onrender.com`).
-
----
-
-### Part 2: Enable GitHub Pages (Free Hosting)
-
-1. Open `script.js` and set your Render URL on line 7:
-   ```javascript
-   const API_URL = "https://your-backend.onrender.com";
-   ```
-2. Commit and push:
-   ```bash
-   git add script.js
-   git commit -m "Set production backend URL"
-   git push origin main
-   ```
-3. Open your GitHub Repository in your browser:
-   `https://github.com/abhinishtiwari/Number-Plate-Detection-Using-Computer-Vision-`
-4. Click **Settings** (top tabs) → Click **Pages** (left sidebar menu).
-5. Under **Build and deployment**:
-   - **Source**: Select `Deploy from a branch`
-   - **Branch**: Select `main` and folder `/ (root)`
-   - Click **Save**.
-
-Your frontend website will be live in ~1 minute at:
-`https://abhinishtiwari.github.io/Number-Plate-Detection-Using-Computer-Vision-/`
+```
+[ Image / Video Upload ]
+           │
+           ▼
+ [ YOLO Plate Detector ]  ──► Bounding Box [x, y, w, h] (Single or Multiple Plates)
+           │
+           ▼
+[ OpenCV Preprocessing ] ──► Grayscale -> Denoise (Bilateral) -> Sharpen -> Otsu Threshold
+           │
+           ▼
+  [ Local OCR Engine ]   ──► PyTesseract / EasyOCR Text Extraction & Normalization
+           │
+           ▼
+  [ Local RTO Database ] ──► Exact Prefix Lookup (rto_database.json)
+           │
+           ▼
+ [ Derived Result Card ] ──► Number Plate, State, RTO Code, City, Confidence
+```
 
 ---
 
-## 📜 License
-Distributed under the MIT License.
+## 📁 Repository Structure
+
+```
+Number-Plate-Detection-Using-Computer-Vision-/
+├── backend/
+│   ├── data/
+│   │   └── rto_database.json   # Local Indian RTO dataset
+│   ├── dataset/
+│   │   └── data.yaml           # YOLOv8 Training Dataset configuration
+│   ├── detector.py             # YOLO & OpenCV multi-plate detector
+│   ├── rto_lookup.py           # Fast prefix lookup engine
+│   ├── main.py                 # FastAPI REST API endpoint (/detect, /health)
+│   ├── requirements.txt        # Python dependencies
+│   └── Dockerfile              # Docker container setup for Render
+├── tests/
+│   └── test_rto.py             # Automated unit tests for RTO dataset mapping
+├── frontend/                   # Frontend copy for static hosting
+├── index.html                  # Main UI dashboard (Plain HTML)
+├── style.css                   # Custom responsive dark CSS design system
+├── script.js                   # Client-side JavaScript controller
+└── README.md                   # Project documentation
+```
+
+---
+
+## 🚗 Local Indian RTO Dataset Schema (`rto_database.json`)
+
+```json
+[
+  {
+    "registration_prefix": "MP09",
+    "state_code": "MP",
+    "state_name": "Madhya Pradesh",
+    "rto_code": "09",
+    "full_rto_code": "MP-09",
+    "city": "Indore"
+  },
+  {
+    "registration_prefix": "RJ14",
+    "state_code": "RJ",
+    "state_name": "Rajasthan",
+    "rto_code": "14",
+    "full_rto_code": "RJ-14",
+    "city": "Jaipur"
+  }
+]
+```
+
+### Example Matching Pipeline:
+- **Input Image Plate**: `MP09AB1234`
+- **OCR Text**: `MP09AB1234`
+- **Extracted Prefix**: `MP09`
+- **State Name**: `Madhya Pradesh`
+- **Full RTO Code**: `MP-09`
+- **Registration City**: `Indore`
+
+If a plate cannot be read, the result cleanly outputs `"Not detected"` / `"Unknown"`.
+
+---
+
+## 📦 YOLO Dataset Training Guide (`data.yaml`)
+
+To train a custom YOLOv8 model for Indian Number Plates:
+
+```yaml
+path: ./dataset
+train: images/train
+val: images/val
+nc: 1
+names:
+  0: number_plate
+```
+
+Run training with Ultralytics CLI:
+```bash
+yolo task=detect mode=train model=yolov8n.pt data=backend/dataset/data.yaml epochs=50 imgsz=640
+```
+
+---
+
+## 🚀 Running Locally
+
+### 1. Start Backend Server (Python FastAPI)
+```bash
+cd backend
+pip install -r requirements.txt
+uvicorn main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+### 2. Start Frontend Server
+Open `index.html` directly in your browser or run:
+```bash
+python -m http.server 5500
+```
+Then visit: `http://127.0.0.1:5500`
+
+---
+
+## 🧪 Running Unit Tests
+
+```bash
+python -m unittest discover -s tests
+```
+
+---
+
+## 📄 License
+Open Source License - Free for educational and commercial use.

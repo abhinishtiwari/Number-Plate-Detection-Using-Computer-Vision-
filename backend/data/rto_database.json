@@ -1,0 +1,52 @@
+[
+  { "registration_prefix": "MP09", "state_code": "MP", "state_name": "Madhya Pradesh", "rto_code": "09", "full_rto_code": "MP-09", "city": "Indore" },
+  { "registration_prefix": "MP04", "state_code": "MP", "state_name": "Madhya Pradesh", "rto_code": "04", "full_rto_code": "MP-04", "city": "Bhopal" },
+  { "registration_prefix": "MP07", "state_code": "MP", "state_name": "Madhya Pradesh", "rto_code": "07", "full_rto_code": "MP-07", "city": "Gwalior" },
+  { "registration_prefix": "MP20", "state_code": "MP", "state_name": "Madhya Pradesh", "rto_code": "20", "full_rto_code": "MP-20", "city": "Jabalpur" },
+  { "registration_prefix": "MP13", "state_code": "MP", "state_name": "Madhya Pradesh", "rto_code": "13", "full_rto_code": "MP-13", "city": "Ujjain" },
+
+  { "registration_prefix": "RJ14", "state_code": "RJ", "state_name": "Rajasthan", "rto_code": "14", "full_rto_code": "RJ-14", "city": "Jaipur" },
+  { "registration_prefix": "RJ45", "state_code": "RJ", "state_name": "Rajasthan", "rto_code": "45", "full_rto_code": "RJ-45", "city": "Jaipur South" },
+  { "registration_prefix": "RJ01", "state_code": "RJ", "state_name": "Rajasthan", "rto_code": "01", "full_rto_code": "RJ-01", "city": "Ajmer" },
+  { "registration_prefix": "RJ19", "state_code": "RJ", "state_name": "Rajasthan", "rto_code": "19", "full_rto_code": "RJ-19", "city": "Jodhpur" },
+  { "registration_prefix": "RJ27", "state_code": "RJ", "state_name": "Rajasthan", "rto_code": "27", "full_rto_code": "RJ-27", "city": "Udaipur" },
+  { "registration_prefix": "RJ20", "state_code": "RJ", "state_name": "Rajasthan", "rto_code": "20", "full_rto_code": "RJ-20", "city": "Kota" },
+
+  { "registration_prefix": "DL01", "state_code": "DL", "state_name": "Delhi", "rto_code": "01", "full_rto_code": "DL-01", "city": "North Delhi" },
+  { "registration_prefix": "DL02", "state_code": "DL", "state_name": "Delhi", "rto_code": "02", "full_rto_code": "DL-02", "city": "New Delhi" },
+  { "registration_prefix": "DL03", "state_code": "DL", "state_name": "Delhi", "rto_code": "03", "full_rto_code": "DL-03", "city": "South Delhi" },
+  { "registration_prefix": "DL04", "state_code": "DL", "state_name": "Delhi", "rto_code": "04", "full_rto_code": "DL-04", "city": "West Delhi" },
+  { "registration_prefix": "DL08", "state_code": "DL", "state_name": "Delhi", "rto_code": "08", "full_rto_code": "DL-08", "city": "North West Delhi" },
+  { "registration_prefix": "DL8C", "state_code": "DL", "state_name": "Delhi", "rto_code": "08", "full_rto_code": "DL-08", "city": "New Delhi" },
+
+  { "registration_prefix": "MH01", "state_code": "MH", "state_name": "Maharashtra", "rto_code": "01", "full_rto_code": "MH-01", "city": "Mumbai South" },
+  { "registration_prefix": "MH02", "state_code": "MH", "state_name": "Maharashtra", "rto_code": "02", "full_rto_code": "MH-02", "city": "Mumbai West" },
+  { "registration_prefix": "MH03", "state_code": "MH", "state_name": "Maharashtra", "rto_code": "03", "full_rto_code": "MH-03", "city": "Mumbai East" },
+  { "registration_prefix": "MH04", "state_code": "MH", "state_name": "Maharashtra", "rto_code": "04", "full_rto_code": "MH-04", "city": "Thane" },
+  { "registration_prefix": "MH12", "state_code": "MH", "state_name": "Maharashtra", "rto_code": "12", "full_rto_code": "MH-12", "city": "Pune" },
+  { "registration_prefix": "MH14", "state_code": "MH", "state_name": "Maharashtra", "rto_code": "14", "full_rto_code": "MH-14", "city": "Pimpri-Chinchwad" },
+  { "registration_prefix": "MH31", "state_code": "MH", "state_name": "Maharashtra", "rto_code": "31", "full_rto_code": "MH-31", "city": "Nagpur" },
+
+  { "registration_prefix": "UP14", "state_code": "UP", "state_name": "Uttar Pradesh", "rto_code": "14", "full_rto_code": "UP-14", "city": "Ghaziabad" },
+  { "registration_prefix": "UP16", "state_code": "UP", "state_name": "Uttar Pradesh", "rto_code": "16", "full_rto_code": "UP-16", "city": "Noida" },
+  { "registration_prefix": "UP32", "state_code": "UP", "state_name": "Uttar Pradesh", "rto_code": "32", "full_rto_code": "UP-32", "city": "Lucknow" },
+  { "registration_prefix": "UP78", "state_code": "UP", "state_name": "Uttar Pradesh", "rto_code": "78", "full_rto_code": "UP-78", "city": "Kanpur" },
+  { "registration_prefix": "UP65", "state_code": "UP", "state_name": "Uttar Pradesh", "rto_code": "65", "full_rto_code": "UP-65", "city": "Varanasi" },
+
+  { "registration_prefix": "KA01", "state_code": "KA", "state_name": "Karnataka", "rto_code": "01", "full_rto_code": "KA-01", "city": "Bengaluru Central" },
+  { "registration_prefix": "KA02", "state_code": "KA", "state_name": "Karnataka", "rto_code": "02", "full_rto_code": "KA-02", "city": "Bengaluru West" },
+  { "registration_prefix": "KA03", "state_code": "KA", "state_name": "Karnataka", "rto_code": "03", "full_rto_code": "KA-03", "city": "Bengaluru East" },
+  { "registration_prefix": "KA05", "state_code": "KA", "state_name": "Karnataka", "rto_code": "05", "full_rto_code": "KA-05", "city": "Bengaluru South" },
+
+  { "registration_prefix": "HR26", "state_code": "HR", "state_name": "Haryana", "rto_code": "26", "full_rto_code": "HR-26", "city": "Gurugram" },
+  { "registration_prefix": "HR51", "state_code": "HR", "state_name": "Haryana", "rto_code": "51", "full_rto_code": "HR-51", "city": "Faridabad" },
+
+  { "registration_prefix": "GJ01", "state_code": "GJ", "state_name": "Gujarat", "rto_code": "01", "full_rto_code": "GJ-01", "city": "Ahmedabad" },
+  { "registration_prefix": "GJ05", "state_code": "GJ", "state_name": "Gujarat", "rto_code": "05", "full_rto_code": "GJ-05", "city": "Surat" },
+
+  { "registration_prefix": "TN01", "state_code": "TN", "state_name": "Tamil Nadu", "rto_code": "01", "full_rto_code": "TN-01", "city": "Chennai Central" },
+  { "registration_prefix": "TN37", "state_code": "TN", "state_name": "Tamil Nadu", "rto_code": "37", "full_rto_code": "TN-37", "city": "Coimbatore" },
+
+  { "registration_prefix": "TS09", "state_code": "TS", "state_name": "Telangana", "rto_code": "09", "full_rto_code": "TS-09", "city": "Hyderabad" },
+  { "registration_prefix": "WB01", "state_code": "WB", "state_name": "West Bengal", "rto_code": "01", "full_rto_code": "WB-01", "city": "Kolkata" }
+]

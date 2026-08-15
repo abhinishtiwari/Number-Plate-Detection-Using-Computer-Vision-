@@ -1,6 +1,6 @@
 /**
  * ===================================================================
- * NUMBER PLATE AI - MAIN DASHBOARD JAVASCRIPT CONTROLLER
+ * NUMBER PLATE AI - REAL LOCAL COMPUTER VISION DASHBOARD
  * ===================================================================
  */
 const PRODUCTION_API_URL = "https://your-backend.onrender.com";
@@ -11,7 +11,7 @@ const API_URL = (
   window.location.protocol === "file:"
 ) ? "http://127.0.0.1:8000" : PRODUCTION_API_URL;
 
-console.log("[Number Plate AI] API Server Connected:", API_URL);
+console.log("[Number Plate AI] Real Local API Server Connected:", API_URL);
 
 // DOM Elements
 const fileInput = document.getElementById("fileInput");
@@ -30,21 +30,20 @@ const previewContainer = document.getElementById("previewContainer");
 const resultCanvas = document.getElementById("resultCanvas");
 const videoPreview = document.getElementById("videoPreview");
 
-// Result Card DOM Elements
+// Derived Detection Result Card Elements
 const resultStatusBadge = document.getElementById("resultStatusBadge");
 const resPlateText = document.getElementById("resPlateText");
 const resState = document.getElementById("resState");
+const resRtoCode = document.getElementById("resRtoCode");
 const resCity = document.getElementById("resCity");
-const resBrand = document.getElementById("resBrand");
-const resVehicleType = document.getElementById("resVehicleType");
-const resColor = document.getElementById("resColor");
 const resConfidence = document.getElementById("resConfidence");
 const confProgressBar = document.getElementById("confProgressBar");
 
-// Stats & Tables
+// Stats & Controls
 const rtoSearchInput = document.getElementById("rtoSearchInput");
 const rtoTableBody = document.getElementById("rtoTableBody");
 const recentDetectionsList = document.getElementById("recentDetectionsList");
+const clearHistoryBtn = document.getElementById("clearHistoryBtn");
 const themeToggleBtn = document.getElementById("themeToggleBtn");
 
 const totalDetectionsVal = document.getElementById("totalDetectionsVal");
@@ -53,19 +52,11 @@ const uniqueVehiclesVal = document.getElementById("uniqueVehiclesVal");
 
 let selectedFile = null;
 let isVideoMode = false;
+let detectionHistory = JSON.parse(localStorage.getItem("anpr_history_v2") || "[]");
 
-// Initialize Default Non-Blank Demo State
-const defaultMatch = {
-  text: "RJ14CV0002",
-  state: "Rajasthan",
-  city: "Jaipur",
-  brand: "KIA",
-  vehicle_type: "Car",
-  color: "White",
-  confidence: 98.6
-};
-
-updateResultCard(defaultMatch);
+// Initial Clean Idle State
+resetDetectionResults();
+renderRecentDetections();
 
 // Theme Toggle
 themeToggleBtn.addEventListener("click", () => {
@@ -110,6 +101,17 @@ dropZone.addEventListener("drop", (e) => {
   }
 });
 
+function resetDetectionResults() {
+  resultStatusBadge.className = "badge-idle";
+  resultStatusBadge.textContent = "Idle";
+  resPlateText.textContent = "--";
+  resState.textContent = "--";
+  resRtoCode.textContent = "--";
+  resCity.textContent = "--";
+  resConfidence.textContent = "0%";
+  confProgressBar.style.width = "0%";
+}
+
 function handleFileSelect(file) {
   if (!file) return;
 
@@ -117,6 +119,7 @@ function handleFileSelect(file) {
   fileNameDisplay.textContent = `Selected: ${file.name} (${(file.size / (1024 * 1024)).toFixed(2)} MB)`;
   detectBtn.disabled = false;
   hideStatus();
+  resetDetectionResults();
 
   if (file.type.startsWith("video/")) {
     isVideoMode = true;
@@ -158,7 +161,7 @@ function handleFileSelect(file) {
  */
 async function waitForBackendServer(maxWaitSeconds = 60) {
   const startTime = Date.now();
-  showStatus("Checking server connection...", "info", true);
+  showStatus("Checking backend server connection...", "info", true);
 
   while ((Date.now() - startTime) / 1000 < maxWaitSeconds) {
     try {
@@ -183,7 +186,7 @@ detectBtn.addEventListener("click", async () => {
 
   try {
     await waitForBackendServer(60);
-    showStatus("Processing AI detection models...", "info", true);
+    showStatus("Running YOLO & OpenCV Local Pipeline...", "info", true);
 
     const formData = new FormData();
     formData.append("file", selectedFile);
@@ -199,39 +202,42 @@ detectBtn.addEventListener("click", async () => {
     showStatus("Detection complete!", "success", false);
 
     if (data.plates && data.plates.length > 0) {
-      const bestMatch = data.plates[0];
-      updateResultCard(bestMatch);
+      const primaryPlate = data.plates[0];
+      updateResultCard(primaryPlate);
       renderCanvasOverlay(selectedFile, data.plates);
-      addRecentDetection(bestMatch);
+      addRecentDetection(primaryPlate);
     } else {
-      updateResultCard(defaultMatch);
-      showStatus("No license plates detected in the file.", "info", false);
+      updateResultCard({
+        text: "Not detected",
+        state_name: "Unknown",
+        full_rto_code: "Unknown",
+        city: "Unknown",
+        confidence: 0.0
+      });
+      showStatus("No license plates detected in the uploaded file.", "info", false);
     }
 
   } catch (error) {
     console.error("Detection Error:", error);
-    showStatus("Processing complete!", "success", false);
-    
-    updateResultCard(defaultMatch);
-    if (selectedFile) renderCanvasOverlay(selectedFile, [defaultMatch]);
-    addRecentDetection(defaultMatch);
+    showStatus("Failed to communicate with local detection engine.", "error", false);
+    resultStatusBadge.className = "badge-idle";
+    resultStatusBadge.textContent = "Error";
   } finally {
     detectBtn.disabled = false;
   }
 });
 
 function updateResultCard(match) {
-  resultStatusBadge.className = "badge-success";
-  resultStatusBadge.textContent = "Success";
+  const isDetected = match.text && match.text !== "Not detected";
+  resultStatusBadge.className = isDetected ? "badge-success" : "badge-idle";
+  resultStatusBadge.textContent = isDetected ? "Success" : "Not Detected";
 
-  resPlateText.textContent = match.text || "RJ14CV0002";
-  resState.textContent = match.state || "Rajasthan";
-  resCity.textContent = match.city || "Jaipur";
-  resBrand.textContent = match.brand || "KIA";
-  resVehicleType.textContent = match.vehicle_type || "Car";
-  resColor.textContent = match.color || "White";
+  resPlateText.textContent = match.text || "Not detected";
+  resState.textContent = match.state_name || "Unknown";
+  resRtoCode.textContent = match.full_rto_code || "Unknown";
+  resCity.textContent = match.city || "Unknown";
   
-  const confVal = match.confidence ? match.confidence.toFixed(1) : "98.6";
+  const confVal = match.confidence ? match.confidence.toFixed(1) : "0.0";
   resConfidence.textContent = `${confVal}%`;
   confProgressBar.style.width = `${confVal}%`;
 }
@@ -250,9 +256,9 @@ function renderCanvasOverlay(file, plates) {
 
       plates.forEach((plate) => {
         const [x, y, w, h] = plate.box;
-        const textLabel = plate.text || "RJ14CV0002";
+        const textLabel = plate.text && plate.text !== "Not detected" ? plate.text : "PLATE DETECTED";
 
-        // Draw green bounding box
+        // Draw bounding box
         ctx.strokeStyle = "#00ff66";
         ctx.lineWidth = Math.max(4, Math.round(img.width / 250));
         ctx.strokeRect(x, y, w, h);
@@ -276,7 +282,7 @@ function renderCanvasOverlay(file, plates) {
   reader.readAsDataURL(file);
 }
 
-// RTO Table Filtering
+// RTO Table Search Filtering
 rtoSearchInput.addEventListener("input", (e) => {
   const query = e.target.value.toLowerCase();
   const rows = rtoTableBody.querySelectorAll("tr");
@@ -286,20 +292,62 @@ rtoSearchInput.addEventListener("input", (e) => {
   });
 });
 
-// Recent Detections List & History
+// Recent Detections List & LocalStorage History
 function addRecentDetection(item) {
-  const plate = item.text || "RJ14CV0002";
-  const state = item.state || "Rajasthan";
-  const city = item.city || "Jaipur";
+  const plate = item.text || "Not detected";
+  const state = item.state_name || "Unknown";
+  const city = item.city || "Unknown";
 
   const newDetection = {
     plate: plate,
     location: `${state}, ${city}`,
+    confidence: item.confidence ? item.confidence.toFixed(1) : "0.0",
     time: "Just now"
   };
 
-  const currentCount = parseInt(totalDetectionsVal.textContent.replace(/,/g, '')) || 1248;
-  totalDetectionsVal.textContent = (currentCount + 1).toLocaleString();
+  detectionHistory.unshift(newDetection);
+  if (detectionHistory.length > 10) detectionHistory.pop();
+  localStorage.setItem("anpr_history_v2", JSON.stringify(detectionHistory));
+  renderRecentDetections();
+}
+
+function renderRecentDetections() {
+  const total = detectionHistory.length;
+  const uniqueSet = new Set(detectionHistory.map(d => d.plate).filter(p => p !== "Not detected"));
+
+  totalDetectionsVal.textContent = total.toLocaleString();
+  todayDetectionsVal.textContent = total.toLocaleString();
+  uniqueVehiclesVal.textContent = uniqueSet.size.toLocaleString();
+
+  if (!detectionHistory.length) {
+    recentDetectionsList.innerHTML = `<div class="empty-recent-msg"><span>No detections recorded yet. Upload an image or video above to begin.</span></div>`;
+    return;
+  }
+
+  recentDetectionsList.innerHTML = "";
+  detectionHistory.forEach((item) => {
+    const div = document.createElement("div");
+    div.className = "recent-item";
+    const prefix = item.plate.length >= 4 ? item.plate.substring(0, 4) : "PLATE";
+    div.innerHTML = `
+      <div class="recent-badge-img">${prefix}</div>
+      <div class="recent-info">
+        <span class="recent-plate">${item.plate}</span>
+        <span class="recent-sub">${item.location} • ${item.confidence}%</span>
+      </div>
+      <span class="recent-time">${item.time}</span>
+    `;
+    recentDetectionsList.appendChild(div);
+  });
+}
+
+if (clearHistoryBtn) {
+  clearHistoryBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    detectionHistory = [];
+    localStorage.removeItem("anpr_history_v2");
+    renderRecentDetections();
+  });
 }
 
 // Status Helpers

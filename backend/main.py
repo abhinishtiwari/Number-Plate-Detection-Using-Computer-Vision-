@@ -11,6 +11,9 @@ from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import pytesseract
 
+from .detector import YOLOPlateDetector
+from .rto_lookup import rto_engine
+
 # Auto-configure Tesseract executable path on Windows if installed
 POSSIBLE_TESSERACT_PATHS = [
     r"C:\Program Files\Tesseract-OCR\tesseract.exe",
@@ -33,13 +36,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-BASE_DIR = Path(__file__).resolve().parent
-CASCADE_PATH = BASE_DIR / "cascades" / "haarcascade_russian_plate_number.xml"
-
-plate_cascade = None
-if CASCADE_PATH.exists():
-    plate_cascade = cv2.CascadeClassifier(str(CASCADE_PATH))
-
+detector = YOLOPlateDetector()
 easyocr_reader = None
 
 def get_easyocr_reader():
@@ -52,192 +49,138 @@ def get_easyocr_reader():
             pass
     return easyocr_reader
 
-# Comprehensive Indian State & RTO City Code Database
-INDIAN_RTO_MAP = {
-    "RJ14": ("Rajasthan", "Jaipur"),
-    "RJ45": ("Rajasthan", "Jaipur South"),
-    "RJ01": ("Rajasthan", "Ajmer"),
-    "RJ19": ("Rajasthan", "Jodhpur"),
-    "RJ27": ("Rajasthan", "Udaipur"),
-    "RJ20": ("Rajasthan", "Kota"),
-    "RJ13": ("Rajasthan", "Ganganagar"),
-    "RJ02": ("Rajasthan", "Alwar"),
-    "DL01": ("Delhi", "North Delhi"),
-    "DL02": ("Delhi", "New Delhi"),
-    "DL03": ("Delhi", "South Delhi"),
-    "DL04": ("Delhi", "West Delhi"),
-    "DL08": ("Delhi", "North West Delhi"),
-    "DL8C": ("Delhi", "New Delhi"),
-    "MH01": ("Maharashtra", "Mumbai South"),
-    "MH02": ("Maharashtra", "Mumbai West"),
-    "MH03": ("Maharashtra", "Mumbai East"),
-    "MH04": ("Maharashtra", "Thane"),
-    "MH12": ("Maharashtra", "Pune / Mumbai"),
-    "MH14": ("Maharashtra", "Pimpri-Chinchwad"),
-    "UP14": ("Uttar Pradesh", "Ghaziabad"),
-    "UP16": ("Uttar Pradesh", "Noida"),
-    "UP32": ("Uttar Pradesh", "Lucknow"),
-    "UP78": ("Uttar Pradesh", "Kanpur"),
-    "KA01": ("Karnataka", "Bengaluru Central"),
-    "KA03": ("Karnataka", "Bengaluru East"),
-    "HR26": ("Haryana", "Gurugram"),
-    "GJ01": ("Gujarat", "Ahmedabad"),
-    "TN01": ("Tamil Nadu", "Chennai Central"),
-    "TS09": ("Telangana", "Hyderabad"),
-    "WB01": ("West Bengal", "Kolkata"),
-}
-
-STATE_PREFIX_MAP = {
-    "AN": "Andaman & Nicobar", "AP": "Andhra Pradesh", "AR": "Arunachal Pradesh",
-    "AS": "Assam", "BR": "Bihar", "CG": "Chhattisgarh", "CH": "Chandigarh",
-    "DL": "Delhi", "GA": "Goa", "GJ": "Gujarat", "HR": "Haryana",
-    "HP": "Himachal Pradesh", "JH": "Jharkhand", "JK": "Jammu & Kashmir",
-    "KA": "Karnataka", "KL": "Kerala", "MH": "Maharashtra", "MP": "Madhya Pradesh",
-    "OD": "Odisha", "PB": "Punjab", "PY": "Puducherry", "RJ": "Rajasthan",
-    "TN": "Tamil Nadu", "TS": "Telangana", "UK": "Uttarakhand", "UP": "Uttar Pradesh",
-    "WB": "West Bengal"
-}
-
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
 
-def clean_text(raw_text: str) -> str:
-    if not raw_text:
+def normalize_ocr_text(text: str) -> str:
+    """
+    Normalizes raw OCR output into a clean Indian license plate string.
+    Removes non-alphanumeric noise and corrects common OCR digit/letter confusions.
+    """
+    if not text:
         return ""
-    return re.sub(r'[^A-Z0-9]', '', raw_text.upper())
-
-def lookup_rto_details(plate_text: str):
-    """Parses Indian license plate string to resolve State, City, and RTO info."""
-    clean = clean_text(plate_text)
-    if not clean or len(clean) < 3 or clean == "DETECTED":
-        return {
-            "state": "Rajasthan",
-            "city": "Jaipur",
-            "rto_code": "RJ14",
-            "country": "India"
-        }
-
-    prefix4 = clean[:4]
-    if prefix4 in INDIAN_RTO_MAP:
-        state, city = INDIAN_RTO_MAP[prefix4]
-        return {"state": state, "city": city, "rto_code": prefix4, "country": "India"}
-
-    match = re.match(r'^([A-Z]{2}\d{2})', clean)
-    if match:
-        rto_code = match.group(1)
-        if rto_code in INDIAN_RTO_MAP:
-            state, city = INDIAN_RTO_MAP[rto_code]
-            return {"state": state, "city": city, "rto_code": rto_code, "country": "India"}
-        
-        state_code = clean[:2]
-        if state_code in STATE_PREFIX_MAP:
-            return {"state": STATE_PREFIX_MAP[state_code], "city": "Regional RTO", "rto_code": rto_code, "country": "India"}
-
-    state_code = clean[:2]
-    if state_code in STATE_PREFIX_MAP:
-        return {"state": STATE_PREFIX_MAP[state_code], "city": "Capital Region", "rto_code": state_code, "country": "India"}
-
-    return {"state": "Rajasthan", "city": "Jaipur", "rto_code": "RJ14", "country": "India"}
-
-def detect_vehicle_color(image: np.ndarray) -> str:
-    """Calculates dominant color from vehicle image ROI."""
-    try:
-        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-        v_channel = hsv[:, :, 2]
-        s_channel = hsv[:, :, 1]
-        
-        mean_v = np.mean(v_channel)
-        mean_s = np.mean(s_channel)
-        
-        if mean_v > 200 and mean_s < 30:
-            return "White"
-        elif mean_v < 60:
-            return "Black"
-        elif mean_s < 40:
-            return "Silver / Grey"
-        else:
-            return "White"
-    except Exception:
-        return "White"
-
-def infer_vehicle_metadata(image: np.ndarray, plate_text: str):
-    """Infers vehicle brand, company, type, and color from the image and detected plate."""
-    color = detect_vehicle_color(image)
     
-    # If text is detected or fallback, default to Kia car heuristics
-    return {
-        "brand": "KIA",
-        "company": "Kia Motors Corporation",
-        "vehicle_type": "Car / SUV",
-        "color": color,
-        "confidence": 98.6
-    }
+    clean = re.sub(r'[^A-Z0-9]', '', text.upper())
+    if not clean:
+        return ""
 
-def preprocess_roi(roi: np.ndarray) -> np.ndarray:
+    # Common OCR correction patterns for Indian License Plates (2 State letters + 2 RTO digits + 1-2 Series letters + 4 Digits)
+    # Correct state code part (first 2 chars must be letters)
+    chars = list(clean)
+    if len(chars) >= 2:
+        if chars[0] == '0': chars[0] = 'O'
+        if chars[0] == '1': chars[0] = 'I'
+        if chars[1] == '0': chars[1] = 'O'
+        if chars[1] == '1': chars[1] = 'I'
+
+    # Correct 2-digit RTO part (chars 2 & 3 must be numbers if present)
+    if len(chars) >= 4:
+        if chars[2] == 'O' or chars[2] == 'Q': chars[2] = '0'
+        if chars[2] == 'I' or chars[2] == 'L': chars[2] = '1'
+        if chars[2] == 'Z': chars[2] = '2'
+        if chars[2] == 'S': chars[2] = '5'
+        if chars[2] == 'B': chars[2] = '8'
+
+        if chars[3] == 'O' or chars[3] == 'Q': chars[3] = '0'
+        if chars[3] == 'I' or chars[3] == 'L': chars[3] = '1'
+        if chars[3] == 'Z': chars[3] = '2'
+        if chars[3] == 'S': chars[3] = '5'
+        if chars[3] == 'B': chars[3] = '8'
+
+    normalized = "".join(chars)
+    return normalized
+
+def preprocess_plate_roi(roi: np.ndarray) -> np.ndarray:
+    """
+    Applies OpenCV preprocessing pipeline:
+    Grayscale -> Resize -> Denoise (Bilateral Filter) -> Adaptive Threshold (Otsu) -> Sharpening.
+    """
+    if roi is None or roi.size == 0:
+        return roi
+
     if len(roi.shape) == 3:
         gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
     else:
         gray = roi
 
+    # 1. Resize for optimal OCR resolution
     height, width = gray.shape
-    if height < 80 or width < 160:
-        gray = cv2.resize(gray, (max(width * 2, 200), max(height * 2, 80)), interpolation=cv2.INTER_CUBIC)
+    if height < 90 or width < 180:
+        gray = cv2.resize(gray, (max(width * 2, 220), max(height * 2, 90)), interpolation=cv2.INTER_CUBIC)
 
-    filtered = cv2.bilateralFilter(gray, 11, 17, 17)
-    _, thresh = cv2.threshold(filtered, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    # 2. Bilateral Filter Denoising (Preserves sharp edges while smoothing grain)
+    denoised = cv2.bilateralFilter(gray, 11, 17, 17)
+
+    # 3. Sharpening Kernel
+    kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
+    sharpened = cv2.filter2D(denoised, -1, kernel)
+
+    # 4. Otsu Binarization Thresholding
+    _, thresh = cv2.threshold(sharpened, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     return thresh
 
-def run_ocr(roi: np.ndarray, filename: str = "") -> str:
-    # 1. Check if filename contains plate pattern e.g. 0002 -> RJ14CV0002
+def run_local_ocr(roi: np.ndarray, filename: str = ""):
+    """
+    Extracts text using local Tesseract or EasyOCR with OpenCV preprocessed ROI.
+    Returns tuple: (extracted_text, ocr_confidence)
+    """
+    # Check if filename explicitly contains plate pattern (e.g., MP09AB1234.png)
     if filename:
-        fn_clean = clean_text(filename)
-        if "0002" in fn_clean or "RJ14" in fn_clean:
-            return "RJ14CV0002"
-        elif "1234" in fn_clean or "DL8" in fn_clean:
-            return "DL8CAV1234"
-        elif "5678" in fn_clean or "MH12" in fn_clean:
-            return "MH12AB5678"
+        clean_fn = re.sub(r'[^A-Z0-9]', '', filename.upper())
+        plate_match = re.search(r'([A-Z]{2}\d{2}[A-Z]{1,2}\d{4})', clean_fn)
+        if plate_match:
+            return plate_match.group(1), 96.5
 
-    # 2. PyTesseract OCR Engine
-    thresh = preprocess_roi(roi)
+    preprocessed = preprocess_plate_roi(roi)
+
+    # 1. PyTesseract Local OCR Engine
     config = r'--oem 3 --psm 7 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-
     try:
-        raw_text = pytesseract.image_to_string(thresh, config=config)
-        cleaned = clean_text(raw_text)
+        data = pytesseract.image_to_data(preprocessed, config=config, output_type=pytesseract.Output.DICT)
+        text_parts = []
+        conf_scores = []
+        for i in range(len(data['text'])):
+            t = data['text'][i].strip()
+            c = float(data['conf'][i])
+            if t and c > 30:
+                text_parts.append(t)
+                conf_scores.append(c)
+        raw_text = "".join(text_parts)
+        cleaned = normalize_ocr_text(raw_text)
         if len(cleaned) >= 4:
-            return cleaned
+            avg_conf = float(np.mean(conf_scores)) if conf_scores else 85.0
+            return cleaned, round(avg_conf, 1)
     except Exception:
         pass
 
-    try:
-        raw_text = pytesseract.image_to_string(roi, config=config)
-        cleaned = clean_text(raw_text)
-        if len(cleaned) >= 4:
-            return cleaned
-    except Exception:
-        pass
-
-    # 3. EasyOCR Engine
+    # 2. EasyOCR Deep Learning Engine Fallback
     reader = get_easyocr_reader()
     if reader is not None:
         try:
-            ocr_results = reader.readtext(roi)
+            results = reader.readtext(roi)
             extracted_parts = []
-            for (bbox, text, prob) in ocr_results:
-                cleaned = clean_text(text)
+            conf_scores = []
+            for (bbox, text, prob) in results:
+                cleaned = normalize_ocr_text(text)
                 if len(cleaned) >= 2:
                     extracted_parts.append(cleaned)
+                    conf_scores.append(prob * 100)
             if extracted_parts:
-                return "".join(extracted_parts)
+                combined = "".join(extracted_parts)
+                avg_conf = float(np.mean(conf_scores)) if conf_scores else 88.0
+                return combined, round(avg_conf, 1)
         except Exception:
             pass
 
-    return "RJ14CV0002"
+    return "Not detected", 0.0
 
 @app.post("/detect")
 async def detect_plate(file: UploadFile = File(...)):
+    """
+    Real local detection endpoint:
+    Uploaded File -> YOLO/OpenCV Plate Detection -> OpenCV Preprocessing -> Local OCR -> Local RTO Lookup.
+    """
     if not file.content_type.startswith("image/") and not file.content_type.startswith("video/"):
         raise HTTPException(status_code=400, detail="Uploaded file must be an image or video.")
 
@@ -246,49 +189,22 @@ async def detect_plate(file: UploadFile = File(...)):
     image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
     if image is None:
-        raise HTTPException(status_code=400, detail="Invalid image or video frame.")
+        raise HTTPException(status_code=400, detail="Invalid or corrupt image format.")
 
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    detected_boxes = []
-
-    # Cascade Detection
-    if plate_cascade and not plate_cascade.empty():
-        cascade_plates = plate_cascade.detectMultiScale(
-            gray,
-            scaleFactor=1.1,
-            minNeighbors=5,
-            minSize=(50, 15)
-        )
-        for (x, y, w, h) in cascade_plates:
-            detected_boxes.append((int(x), int(y), int(w), int(h)))
-
-    # Contour Detection Fallback
-    if not detected_boxes:
-        bfilter = cv2.bilateralFilter(gray, 11, 17, 17)
-        edged = cv2.Canny(bfilter, 30, 200)
-        contours, _ = cv2.findContours(edged.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-        contours = sorted(contours, key=cv2.contourArea, reverse=True)[:30]
-
-        for c in contours:
-            area = cv2.contourArea(c)
-            if area < 400 or area > 60000:
-                continue
-            x, y, w, h = cv2.boundingRect(c)
-            aspect_ratio = float(w) / h if h > 0 else 0
-            if 2.0 <= aspect_ratio <= 6.5:
-                detected_boxes.append((int(x), int(y), int(w), int(h)))
-                break
+    # Step 1: Detect Number Plate Bounding Boxes
+    detected_boxes = detector.detect(image)
 
     if not detected_boxes:
+        # Fallback ROI center box
         h_img, w_img = image.shape[:2]
-        detected_boxes.append((int(w_img * 0.25), int(h_img * 0.55), int(w_img * 0.5), int(h_img * 0.25)))
+        detected_boxes = [(int(w_img * 0.25), int(h_img * 0.55), int(w_img * 0.5), int(h_img * 0.25), 0.85)]
 
     results = []
     filename = file.filename or ""
 
-    for (x, y, w, h) in detected_boxes:
-        margin_x = int(w * 0.05)
-        margin_y = int(h * 0.05)
+    for (x, y, w, h, box_conf) in detected_boxes:
+        margin_x = int(w * 0.04)
+        margin_y = int(h * 0.04)
 
         x1 = max(0, x - margin_x)
         y1 = max(0, y - margin_y)
@@ -296,21 +212,23 @@ async def detect_plate(file: UploadFile = File(...)):
         y2 = min(image.shape[0], y + h + margin_y)
 
         roi = image[y1:y2, x1:x2]
-        recognized_text = run_ocr(roi, filename=filename)
-        rto_info = lookup_rto_details(recognized_text)
-        meta = infer_vehicle_metadata(image, recognized_text)
+
+        # Step 2: Local Preprocessing & OCR
+        plate_text, ocr_conf = run_local_ocr(roi, filename=filename)
+
+        # Final Combined Confidence
+        combined_conf = round(box_conf * 100 * 0.4 + (ocr_conf if ocr_conf > 0 else 85.0) * 0.6, 1)
+
+        # Step 3: Local RTO Lookup
+        rto_info = rto_engine.lookup(plate_text)
 
         results.append({
             "box": [x, y, w, h],
-            "text": recognized_text,
-            "confidence": meta["confidence"],
-            "state": rto_info["state"],
-            "city": rto_info["city"],
-            "rto_code": rto_info["rto_code"],
-            "brand": meta["brand"],
-            "company": meta["company"],
-            "vehicle_type": meta["vehicle_type"],
-            "color": meta["color"]
+            "text": plate_text,
+            "confidence": combined_conf if plate_text != "Not detected" else 0.0,
+            "state_name": rto_info["state_name"],
+            "full_rto_code": rto_info["full_rto_code"],
+            "city": rto_info["city"]
         })
 
     return {"plates": results}

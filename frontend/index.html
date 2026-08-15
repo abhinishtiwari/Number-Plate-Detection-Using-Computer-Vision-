@@ -17,7 +17,7 @@
       <div class="logo-box">AI</div>
       <div class="brand-text">
         <span class="brand-title">Number Plate AI</span>
-        <span class="brand-subtitle">Open Source License Plate Recognition</span>
+        <span class="brand-subtitle">Local Computer Vision Pipeline</span>
       </div>
     </div>
     
@@ -49,16 +49,10 @@
           <span class="nav-icon">📹</span> Live Detection <span class="badge-purple-sm">COMING SOON</span>
         </a>
         <a href="#history" class="nav-item" data-tab="history">
-          <span class="nav-icon">📜</span> History
-        </a>
-        <a href="#analytics" class="nav-item" data-tab="analytics">
-          <span class="nav-icon">📈</span> Analytics
+          <span class="nav-icon">📜</span> Detection History
         </a>
         <a href="#rto-mapping" class="nav-item" data-tab="rto">
-          <span class="nav-icon">🗺️</span> RTO City Mapping
-        </a>
-        <a href="#about" class="nav-item" data-tab="about">
-          <span class="nav-icon">ℹ️</span> About Project
+          <span class="nav-icon">🗺️</span> RTO Mapping
         </a>
       </nav>
 
@@ -75,17 +69,16 @@
     <!-- Main Content Dashboard -->
     <main class="main-content">
 
-      <!-- Top 4 Stats Cards Grid -->
+      <!-- Top Stats Cards Grid -->
       <section class="stats-grid">
         <div class="stat-card">
           <div class="stat-icon icon-blue">🚘</div>
           <div class="stat-info">
             <span class="stat-label">Total Detections</span>
             <div class="stat-val-row">
-              <span class="stat-value" id="totalDetectionsVal">1,248</span>
-              <span class="stat-badge badge-green">↑ 18.5%</span>
+              <span class="stat-value" id="totalDetectionsVal">0</span>
             </div>
-            <span class="stat-sub">All time</span>
+            <span class="stat-sub">Logged in current session</span>
           </div>
         </div>
 
@@ -94,34 +87,20 @@
           <div class="stat-info">
             <span class="stat-label">Today Detections</span>
             <div class="stat-val-row">
-              <span class="stat-value" id="todayDetectionsVal">148</span>
-              <span class="stat-badge badge-green">↑ 12.3%</span>
+              <span class="stat-value" id="todayDetectionsVal">0</span>
             </div>
-            <span class="stat-sub">Today</span>
+            <span class="stat-sub">Processed today</span>
           </div>
         </div>
 
         <div class="stat-card">
           <div class="stat-icon icon-green">👥</div>
           <div class="stat-info">
-            <span class="stat-label">Unique Vehicles</span>
+            <span class="stat-label">Unique Plates</span>
             <div class="stat-val-row">
-              <span class="stat-value" id="uniqueVehiclesVal">1,025</span>
-              <span class="stat-badge badge-green">↑ 8.7%</span>
+              <span class="stat-value" id="uniqueVehiclesVal">0</span>
             </div>
-            <span class="stat-sub">All time</span>
-          </div>
-        </div>
-
-        <div class="stat-card">
-          <div class="stat-icon icon-orange">🎯</div>
-          <div class="stat-info">
-            <span class="stat-label">Accuracy</span>
-            <div class="stat-val-row">
-              <span class="stat-value">98.6%</span>
-              <span class="stat-badge badge-green">↑ 2.1%</span>
-            </div>
-            <span class="stat-sub">Overall Accuracy</span>
+            <span class="stat-sub">Unique vehicles scanned</span>
           </div>
         </div>
       </section>
@@ -166,55 +145,45 @@
           </div>
 
           <button id="detectBtn" class="btn-primary-full" disabled>
-            🔍 Detect Number Plate
+            🔍 Run Local Detection
           </button>
         </div>
 
-        <!-- Middle: Detection Result Card (Clean Non-Blank Default) -->
+        <!-- Middle: Detection Result Card (Derived Terms Only) -->
         <div class="card result-card">
           <div class="card-header">
             <h3>Detection Result</h3>
-            <span class="badge-success" id="resultStatusBadge">Success</span>
+            <span class="badge-idle" id="resultStatusBadge">Idle</span>
           </div>
 
           <div class="result-details">
             <div class="detail-row highlight-row">
-              <span class="detail-label">💳 Vehicle Number</span>
-              <span class="detail-val plate-green" id="resPlateText">RJ14CV0002</span>
+              <span class="detail-label">💳 Number Plate</span>
+              <span class="detail-val plate-green" id="resPlateText">--</span>
             </div>
 
             <div class="detail-row">
               <span class="detail-label">🏛️ State</span>
-              <span class="detail-val" id="resState">Rajasthan</span>
+              <span class="detail-val" id="resState">--</span>
             </div>
 
             <div class="detail-row">
-              <span class="detail-label">📍 City / Region</span>
-              <span class="detail-val" id="resCity">Jaipur</span>
+              <span class="detail-label">🏷️ RTO Code</span>
+              <span class="detail-val" id="resRtoCode">--</span>
             </div>
 
             <div class="detail-row">
-              <span class="detail-label">🚘 Vehicle Brand</span>
-              <span class="detail-val" id="resBrand">KIA</span>
-            </div>
-
-            <div class="detail-row">
-              <span class="detail-label">🚗 Vehicle Type</span>
-              <span class="detail-val" id="resVehicleType">Car</span>
-            </div>
-
-            <div class="detail-row">
-              <span class="detail-label">🎨 Color</span>
-              <span class="detail-val" id="resColor">White</span>
+              <span class="detail-label">📍 Registration City</span>
+              <span class="detail-val" id="resCity">--</span>
             </div>
 
             <div class="detail-row flex-col">
               <div class="flex-between">
-                <span class="detail-label">🎯 Confidence</span>
-                <span class="detail-val bold" id="resConfidence">98.6%</span>
+                <span class="detail-label">🎯 Detection Confidence</span>
+                <span class="detail-val bold" id="resConfidence">0%</span>
               </div>
               <div class="progress-bar-bg">
-                <div class="progress-bar-fill" id="confProgressBar" style="width: 98.6%;"></div>
+                <div class="progress-bar-fill" id="confProgressBar" style="width: 0%;"></div>
               </div>
             </div>
           </div>
@@ -227,7 +196,7 @@
           </div>
 
           <div class="search-box">
-            <input type="text" id="rtoSearchInput" placeholder="Search number or city...">
+            <input type="text" id="rtoSearchInput" placeholder="Search prefix, state, or city...">
             <span class="search-icon">🔍</span>
           </div>
 
@@ -235,140 +204,72 @@
             <table class="rto-table">
               <thead>
                 <tr>
-                  <th>Vehicle Number</th>
-                  <th>State/UT</th>
+                  <th>Prefix</th>
+                  <th>State</th>
                   <th>City</th>
                 </tr>
               </thead>
               <tbody id="rtoTableBody">
                 <tr>
-                  <td class="bold-text">RJ14CV0002</td>
+                  <td class="bold-text">MP09</td>
+                  <td>Madhya Pradesh</td>
+                  <td>Indore</td>
+                </tr>
+                <tr>
+                  <td class="bold-text">MP04</td>
+                  <td>Madhya Pradesh</td>
+                  <td>Bhopal</td>
+                </tr>
+                <tr>
+                  <td class="bold-text">RJ14</td>
                   <td>Rajasthan</td>
                   <td>Jaipur</td>
                 </tr>
                 <tr>
-                  <td class="bold-text">DL8CAV1234</td>
+                  <td class="bold-text">DL08</td>
                   <td>Delhi</td>
                   <td>New Delhi</td>
                 </tr>
                 <tr>
-                  <td class="bold-text">MH12AB5678</td>
+                  <td class="bold-text">MH12</td>
                   <td>Maharashtra</td>
-                  <td>Mumbai / Pune</td>
+                  <td>Pune</td>
                 </tr>
                 <tr>
-                  <td class="bold-text">UP32KJ9012</td>
+                  <td class="bold-text">UP32</td>
                   <td>Uttar Pradesh</td>
                   <td>Lucknow</td>
                 </tr>
                 <tr>
-                  <td class="bold-text">KA03MG1122</td>
+                  <td class="bold-text">KA03</td>
                   <td>Karnataka</td>
                   <td>Bengaluru</td>
                 </tr>
                 <tr>
-                  <td class="bold-text">HR26DQ9999</td>
+                  <td class="bold-text">HR26</td>
                   <td>Haryana</td>
                   <td>Gurugram</td>
-                </tr>
-                <tr>
-                  <td class="bold-text">TN01AB1111</td>
-                  <td>Tamil Nadu</td>
-                  <td>Chennai</td>
                 </tr>
               </tbody>
             </table>
           </div>
-          <div class="card-footer-link">
-            <a href="#" id="viewFullRtoBtn">View Full List</a>
-          </div>
         </div>
       </section>
 
-      <!-- Bottom Analytics & Recent Detections Grid -->
+      <!-- Bottom History Grid -->
       <section class="bottom-grid">
-        
-        <!-- Left: Analytics Line Chart -->
-        <div class="card analytics-card">
-          <div class="card-header">
-            <h3>Detection Analytics</h3>
-            <select class="select-dropdown" id="analyticsRange">
-              <option value="7">Last 7 Days</option>
-              <option value="30">Last 30 Days</option>
-            </select>
-          </div>
-
-          <div class="chart-container">
-            <svg class="analytics-svg" viewBox="0 0 500 180" preserveAspectRatio="none">
-              <line x1="0" y1="40" x2="500" y2="40" stroke="#1e293b" stroke-dasharray="4" />
-              <line x1="0" y1="90" x2="500" y2="90" stroke="#1e293b" stroke-dasharray="4" />
-              <line x1="0" y1="140" x2="500" y2="140" stroke="#1e293b" stroke-dasharray="4" />
-
-              <polyline
-                fill="none"
-                stroke="#38bdf8"
-                stroke-width="3"
-                points="10,130 80,70 150,110 220,50 290,120 360,60 430,100 490,40"
-              />
-
-              <circle cx="10" cy="130" r="4" fill="#38bdf8" />
-              <circle cx="80" cy="70" r="4" fill="#38bdf8" />
-              <circle cx="150" cy="110" r="4" fill="#38bdf8" />
-              <circle cx="220" cy="50" r="4" fill="#38bdf8" />
-              <circle cx="290" cy="120" r="4" fill="#38bdf8" />
-              <circle cx="360" cy="60" r="4" fill="#38bdf8" />
-              <circle cx="430" cy="100" r="4" fill="#38bdf8" />
-              <circle cx="490" cy="40" r="4" fill="#38bdf8" />
-            </svg>
-            <div class="chart-labels">
-              <span>May 10</span>
-              <span>May 11</span>
-              <span>May 12</span>
-              <span>May 13</span>
-              <span>May 14</span>
-              <span>May 15</span>
-              <span>May 16</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Right: Recent Detections List -->
         <div class="card recent-card">
           <div class="card-header">
-            <h3>Recent Detections</h3>
-            <a href="#" class="link-sm" id="viewAllRecentBtn">View All</a>
+            <h3>Detection History</h3>
+            <a href="#" class="link-sm" id="clearHistoryBtn">Clear History</a>
           </div>
 
           <div class="recent-list" id="recentDetectionsList">
-            <div class="recent-item">
-              <div class="recent-badge-img">RJ14</div>
-              <div class="recent-info">
-                <span class="recent-plate">RJ14CV0002</span>
-                <span class="recent-sub">Rajasthan, Jaipur</span>
-              </div>
-              <span class="recent-time">2 mins ago</span>
-            </div>
-
-            <div class="recent-item">
-              <div class="recent-badge-img">DL8C</div>
-              <div class="recent-info">
-                <span class="recent-plate">DL8CAV1234</span>
-                <span class="recent-sub">Delhi, New Delhi</span>
-              </div>
-              <span class="recent-time">15 mins ago</span>
-            </div>
-
-            <div class="recent-item">
-              <div class="recent-badge-img">MH12</div>
-              <div class="recent-info">
-                <span class="recent-plate">MH12AB5678</span>
-                <span class="recent-sub">Maharashtra, Mumbai</span>
-              </div>
-              <span class="recent-time">32 mins ago</span>
+            <div class="empty-recent-msg" id="emptyRecentMsg">
+              <span>No detections recorded yet. Upload an image or video above to begin.</span>
             </div>
           </div>
         </div>
-
       </section>
 
     </main>
@@ -377,8 +278,8 @@
 
   <!-- Footer -->
   <footer class="app-footer">
-    <span>© 2025 Number Plate AI. Open Source License.</span>
-    <span>Made with ❤️ for safer roads</span>
+    <span>© 2025 Number Plate AI. Open Source Local Pipeline.</span>
+    <span>YOLO + OpenCV + Local OCR + RTO Dataset</span>
   </footer>
 
   <script src="script.js"></script>
