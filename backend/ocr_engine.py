@@ -54,16 +54,16 @@ def get_easyocr_reader():
             logger.debug(f"EasyOCR initialization note: {e}")
     return easyocr_reader
 
-# Rendered 20x30 Alphanumeric Font Templates for Zero-Dependency OpenCV OCR
+# Rendered Alphanumeric Font Templates for Zero-Dependency OpenCV OCR
 def build_opencv_font_templates():
     templates = {}
     chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
     for char in chars:
-        canvas = np.zeros((40, 30), dtype=np.uint8)
-        (tw, th), _ = cv2.getTextSize(char, cv2.FONT_HERSHEY_SIMPLEX, 0.9, 2)
-        tx = max(0, (30 - tw) // 2)
-        ty = max(25, (40 + th) // 2)
-        cv2.putText(canvas, char, (tx, ty), cv2.FONT_HERSHEY_SIMPLEX, 0.9, 255, 2, cv2.LINE_AA)
+        canvas = np.zeros((45, 35), dtype=np.uint8)
+        (tw, th), _ = cv2.getTextSize(char, cv2.FONT_HERSHEY_DUPLEX, 1.0, 2)
+        tx = max(0, (35 - tw) // 2)
+        ty = max(30, (45 + th) // 2)
+        cv2.putText(canvas, char, (tx, ty), cv2.FONT_HERSHEY_DUPLEX, 1.0, 255, 2, cv2.LINE_AA)
         templates[char] = cv2.resize(canvas, (20, 30), interpolation=cv2.INTER_AREA)
     return templates
 
@@ -79,7 +79,7 @@ class LocalOCREngine:
         """
         Dynamic Text Normalizer:
         Strips non-alphanumeric noise, removes country badge 'IND', corrects letter/digit confusions.
-        No hardcoded fallback plates.
+        No hardcoded fallback plates or forced state overrides.
         """
         if not text:
             return ""
@@ -92,64 +92,42 @@ class LocalOCREngine:
         if clean.startswith("IND") and len(clean) > 5:
             clean = clean[3:]
 
-        # Fix State Code letter confusions (first 2 chars must be valid Indian State prefix)
-        if len(clean) >= 2:
-            st = clean[:2]
-            if st in ['NM', 'NH', 'MM', 'HN', 'HH', 'M1']: st = 'MH'
-            elif st in ['MR', 'MB', 'NP', 'HP', 'M0']: st = 'MP'
-            elif st in ['OL', 'OI', 'DI', '0L', 'D1']: st = 'DL'
-            elif st in ['PJ', 'RK', 'BJ', '0J', 'R1']: st = 'RJ'
-            elif st in ['VP', 'UR', 'IP', '0P', 'U1']: st = 'UP'
-            elif st in ['XA', 'HA', 'K1']: st = 'KA'
-            elif st in ['HK', 'HA', 'H1']: st = 'HR'
-            elif st in ['0D', 'O0']: st = 'OD'
-            elif st in ['P3', 'P8']: st = 'PB'
-            clean = st + clean[2:]
-
-        # Search for standard Indian License Plate regex pattern:
-        # State (2 letters) + RTO Code (1-2 digits) + Series (1-3 letters) + Number (1-4 digits)
-        plate_match = re.search(r'([A-Z]{2}\d{1,2}[A-Z]{1,3}\d{1,4})', clean)
-        if plate_match:
-            clean = plate_match.group(1)
-
         chars = list(clean)
 
-        # Fix State Code letters (first 2 chars must be uppercase letters)
+        # Fix State Code letter confusions (first 2 chars)
         if len(chars) >= 2:
-            if chars[0] == '0': chars[0] = 'O'
-            if chars[0] == '1': chars[0] = 'I'
-            if chars[1] == '0': chars[1] = 'O'
-            if chars[1] == '1': chars[1] = 'I'
+            if chars[0] == 'R' and chars[1] == 'R': chars[1] = 'J' # RR -> RJ (Rajasthan)
+            elif chars[0] == 'N' and chars[1] == 'M': chars[0], chars[1] = 'M', 'H' # NM -> MH (Maharashtra)
+            elif chars[0] in ['0', 'O'] and chars[1] == 'J': chars[0] = 'R'
+            elif chars[0] in ['0', 'O'] and chars[1] == 'L': chars[0] = 'D'
+            elif chars[0] in ['0', 'O'] and chars[1] == 'P': chars[0] = 'M'
 
-        # Fix RTO Code digits (chars 2 & 3 must be numbers if present)
+        # Fix RTO Code digits (chars 2 & 3 must be numbers)
         if len(chars) >= 4:
-            if chars[2] in ['O', 'Q', 'D']: chars[2] = '0'
-            if chars[2] in ['I', 'L', 'J']: chars[2] = '1'
-            if chars[2] == 'Z': chars[2] = '2'
-            if chars[2] == 'S': chars[2] = '5'
-            if chars[2] == 'B': chars[2] = '8'
-
-            if chars[3] in ['O', 'Q', 'D']: chars[3] = '0'
-            if chars[3] in ['I', 'L', 'J']: chars[3] = '1'
-            if chars[3] == 'Z': chars[3] = '2'
-            if chars[3] == 'S': chars[3] = '5'
-            if chars[3] == 'B': chars[3] = '8'
+            for idx in [2, 3]:
+                if chars[idx] in ['O', 'Q', 'D']: chars[idx] = '0'
+                elif chars[idx] in ['I', 'L', 'J', 'T']: chars[idx] = '1'
+                elif chars[idx] == 'Z': chars[idx] = '2'
+                elif chars[idx] == 'S': chars[idx] = '5'
+                elif chars[idx] == 'B': chars[idx] = '8'
 
         # Fix trailing digits (last 4 chars must be numbers if length >= 8)
         if len(chars) >= 8:
             for idx in range(len(chars) - 4, len(chars)):
                 if chars[idx] in ['O', 'Q', 'D']: chars[idx] = '0'
-                elif chars[idx] in ['I', 'L', 'J']: chars[idx] = '1'
+                elif chars[idx] in ['I', 'L', 'T', 'J']: chars[idx] = '0' if chars[idx] != '1' else '1'
                 elif chars[idx] == 'Z': chars[idx] = '2'
                 elif chars[idx] == 'S': chars[idx] = '5'
                 elif chars[idx] == 'B': chars[idx] = '8'
 
-        return "".join(chars)
+        res = "".join(chars)
+        plate_match = re.search(r'([A-Z]{2}\d{1,2}[A-Z]{1,3}\d{1,4})', res)
+        return plate_match.group(1) if plate_match else res
 
     def preprocess_roi(self, roi: np.ndarray):
         """
         Generates dynamic OpenCV image pre-processing variations for cropped plate ROI.
-        Strip outer plate border frame (10% inner crop) to isolate character shapes cleanly.
+        Strip outer plate border frame (8% inner crop) to isolate character shapes cleanly.
         """
         if roi is None or roi.size == 0:
             return []

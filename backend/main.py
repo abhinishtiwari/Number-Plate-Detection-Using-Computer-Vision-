@@ -80,6 +80,16 @@ def process_frame(image: np.ndarray):
             "city": rto_info["city"]
         })
 
+    # Sort results prioritizing plates with valid matched State names over unmapped sub-boxes
+    results.sort(
+        key=lambda p: (
+            p["state_name"] not in ["Unknown", "Not detected"],
+            p["text"] != "Not detected",
+            p["confidence"]
+        ),
+        reverse=True
+    )
+
     return results
 
 @app.post("/detect")

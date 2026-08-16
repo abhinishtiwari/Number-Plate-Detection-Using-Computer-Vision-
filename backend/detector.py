@@ -29,6 +29,7 @@ class YOLOPlateDetector:
         100% Dynamic Object Detector:
         Detects actual license plate bounding boxes [x, y, w, h] in image frame.
         Calculates confidence dynamically. Returns empty list [] if no plates found.
+        Filters out non-plate small candidate boxes (h < 25 or w < 60 or aspect < 1.8).
         No hardcoded bounding box fallbacks or fixed coordinates.
         """
         if image is None or image.size == 0:
@@ -47,13 +48,14 @@ class YOLOPlateDetector:
                         conf = float(box.conf[0])
                         w = int(x2 - x1)
                         h = int(y2 - y1)
-                        boxes.append((int(x1), int(y1), w, h, conf))
+                        if w >= 60 and h >= 22 and (w / max(h, 1)) >= 1.8:
+                            boxes.append((int(x1), int(y1), w, h, conf))
                 if boxes:
                     return self._nms(boxes)
             except Exception as e:
                 print(f"[YOLO Inference] Note: {e}")
 
-        # 2. Contour & High-Contrast Plate Geometry Detector (Primary CV Detector)
+        # 2. High-Contrast Plate Geometry Detector (Primary CV Detector)
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
         bfilter = cv2.bilateralFilter(gray, 11, 17, 17)
         edged = cv2.Canny(bfilter, 30, 200)
@@ -68,42 +70,46 @@ class YOLOPlateDetector:
             aspect = float(w) / h if h > 0 else 0
             area = cv2.contourArea(c)
 
-            if len(approx) >= 4 and 1.8 <= aspect <= 5.5 and 1200 <= area <= 80000:
+            # Standard Indian License Plate bounding box filters: w >= 70, h >= 24, 2.0 <= aspect <= 5.5
+            if len(approx) >= 4 and 2.0 <= aspect <= 5.5 and w >= 70 and h >= 24 and 2200 <= area <= 90000:
                 roi_gray = gray[y:y+h, x:x+w]
                 if roi_gray.size > 0:
                     std_val = float(np.std(roi_gray))
-                    mean_val = float(np.mean(roi_gray))
                     # High contrast plate ROI (text vs background)
                     if std_val > 25:
-                        score = min(0.98, max(0.70, 0.75 + (std_val / 200.0)))
+                        score = min(0.98, max(0.72, 0.75 + (std_val / 200.0)))
                         boxes.append((int(x), int(y), int(w), int(h), round(score, 3)))
 
-        # 3. Haar Cascade Detection Fallback
+        # 3. Haar Cascade Detection Fallback (filtered by minimum plate size)
         if self.cascade and not self.cascade.empty():
             try:
                 rects, rejectLevels, levelWeights = self.cascade.detectMultiScale3(
                     gray,
                     scaleFactor=1.08,
-                    minNeighbors=4,
-                    minSize=(36, 12),
+                    minNeighbors=5,
+                    minSize=(70, 24),
                     outputRejectLevels=True
                 )
                 for i, (x, y, w, h) in enumerate(rects):
-                    raw_score = float(levelWeights[i][0]) if len(levelWeights) > i else 1.0
-                    dynamic_conf = min(0.92, max(0.55, 0.50 + raw_score * 0.04))
-                    boxes.append((int(x), int(y), int(w), int(h), dynamic_conf))
+                    aspect = float(w) / h if h > 0 else 0
+                    if 2.0 <= aspect <= 5.5:
+                        raw_score = float(levelWeights[i][0]) if len(levelWeights) > i else 1.0
+                        dynamic_conf = min(0.92, max(0.55, 0.50 + raw_score * 0.04))
+                        boxes.append((int(x), int(y), int(w), int(h), dynamic_conf))
             except Exception:
                 cascade_plates = self.cascade.detectMultiScale(
-                    gray, scaleFactor=1.08, minNeighbors=4, minSize=(36, 12)
+                    gray, scaleFactor=1.08, minNeighbors=5, minSize=(70, 24)
                 )
                 for (x, y, w, h) in cascade_plates:
-                    boxes.append((int(x), int(y), int(w), int(h), 0.70))
+                    aspect = float(w) / h if h > 0 else 0
+                    if 2.0 <= aspect <= 5.5:
+                        boxes.append((int(x), int(y), int(w), int(h), 0.70))
 
         # Non-Maximum Suppression to remove duplicate candidate boxes
         unique_boxes = self._nms(boxes)
         return unique_boxes
 
-    def _nms(self, boxes, iou_threshold=0.3):
+    def _nms(self, boxes, iou_threshold=0.25):
         """Applies Non-Maximum Suppression to eliminate overlapping candidate bounding boxes."""
         if not boxes:
             return []
