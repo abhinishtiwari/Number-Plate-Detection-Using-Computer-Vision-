@@ -54,58 +54,22 @@ def get_easyocr_reader():
             logger.debug(f"EasyOCR initialization note: {e}")
     return easyocr_reader
 
-# Built-in 5x7 Alphanumeric Bitmap Font Templates for Zero-Dependency OpenCV OCR
-CHARACTER_TEMPLATES = {
-    '0': ['.###.', '#...#', '#...#', '#...#', '#...#', '#...#', '.###.'],
-    '1': ['..#..', '.##..', '..#..', '..#..', '..#..', '..#..', '.###.'],
-    '2': ['.###.', '#...#', '....#', '.###.', '#....', '#....', '#####'],
-    '3': ['.###.', '#...#', '....#', '..##.', '....#', '#...#', '.###.'],
-    '4': ['#...#', '#...#', '#...#', '#####', '....#', '....#', '....#'],
-    '5': ['#####', '#....', '####.', '....#', '....#', '#...#', '.###.'],
-    '6': ['.###.', '#....', '####.', '#...#', '#...#', '#...#', '.###.'],
-    '7': ['#####', '....#', '...#.', '..#..', '.#...', '.#...', '.#...'],
-    '8': ['.###.', '#...#', '#...#', '.###.', '#...#', '#...#', '.###.'],
-    '9': ['.###.', '#...#', '#...#', '.####', '....#', '....#', '.###.'],
-    'A': ['.###.', '#...#', '#...#', '#####', '#...#', '#...#', '#...#'],
-    'B': ['####.', '#...#', '#...#', '####.', '#...#', '#...#', '####.'],
-    'C': ['.###.', '#...#', '#....', '#....', '#....', '#...#', '.###.'],
-    'D': ['####.', '#...#', '#...#', '#...#', '#...#', '#...#', '####.'],
-    'E': ['#####', '#....', '####.', '#....', '#....', '#....', '#####'],
-    'F': ['#####', '#....', '####.', '#....', '#....', '#....', '#....'],
-    'G': ['.###.', '#...#', '#....', '#.###', '#...#', '#...#', '.###.'],
-    'H': ['#...#', '#...#', '#...#', '#####', '#...#', '#...#', '#...#'],
-    'I': ['#####', '..#..', '..#..', '..#..', '..#..', '..#..', '#####'],
-    'J': ['...##', '....#', '....#', '....#', '....#', '#...#', '.###.'],
-    'K': ['#...#', '#..#.', '#.#..', '##...', '#.#..', '#..#.', '#...#'],
-    'L': ['#....', '#....', '#....', '#....', '#....', '#....', '#####'],
-    'M': ['#...#', '##.##', '#.#.#', '#...#', '#...#', '#...#', '#...#'],
-    'N': ['#...#', '##..#', '#.#.#', '#..##', '#...#', '#...#', '#...#'],
-    'O': ['.###.', '#...#', '#...#', '#...#', '#...#', '#...#', '.###.'],
-    'P': ['####.', '#...#', '#...#', '####.', '#....', '#....', '#....'],
-    'Q': ['.###.', '#...#', '#...#', '#...#', '#.#.#', '#..#.', '.##.#'],
-    'R': ['####.', '#...#', '#...#', '####.', '#.#..', '#..#.', '#...#'],
-    'S': ['.####', '#....', '#....', '.###.', '....#', '....#', '####.'],
-    'T': ['#####', '..#..', '..#..', '..#..', '..#..', '..#..', '..#..'],
-    'U': ['#...#', '#...#', '#...#', '#...#', '#...#', '#...#', '.###.'],
-    'V': ['#...#', '#...#', '#...#', '#...#', '#...#', '.#.#.', '..#..'],
-    'W': ['#...#', '#...#', '#...#', '#.#.#', '##.##', '##.##', '#...#'],
-    'X': ['#...#', '#...#', '.#.#.', '..#..', '.#.#.', '#...#', '#...#'],
-    'Y': ['#...#', '#...#', '.#.#.', '..#..', '..#..', '..#..', '..#..'],
-    'Z': ['#####', '....#', '...#.', '..#..', '.#...', '#....', '#####'],
-}
-
-def build_template_images():
+# Rendered 20x30 Alphanumeric Font Templates for Zero-Dependency OpenCV OCR
+def build_opencv_font_templates():
     templates = {}
-    for char, lines in CHARACTER_TEMPLATES.items():
-        img = np.zeros((7, 5), dtype=np.uint8)
-        for r, line in enumerate(lines):
-            for c, ch in enumerate(line):
-                if ch == '#':
-                    img[r, c] = 255
-        templates[char] = cv2.resize(img, (20, 30), interpolation=cv2.INTER_NEAREST)
+    chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    for char in chars:
+        canvas = np.zeros((40, 30), dtype=np.uint8)
+        (tw, th), _ = cv2.getTextSize(char, cv2.FONT_HERSHEY_SIMPLEX, 0.9, 2)
+        tx = max(0, (30 - tw) // 2)
+        ty = max(25, (40 + th) // 2)
+        cv2.putText(canvas, char, (tx, ty), cv2.FONT_HERSHEY_SIMPLEX, 0.9, 255, 2, cv2.LINE_AA)
+        templates[char] = cv2.resize(canvas, (20, 30), interpolation=cv2.INTER_AREA)
     return templates
 
-OPENCV_TEMPLATES = build_template_images()
+OPENCV_TEMPLATES = build_opencv_font_templates()
+LETTERS_TEMPLATES = {k: v for k, v in OPENCV_TEMPLATES.items() if k.isalpha()}
+DIGITS_TEMPLATES = {k: v for k, v in OPENCV_TEMPLATES.items() if k.isdigit()}
 
 class LocalOCREngine:
     def __init__(self):
@@ -127,6 +91,20 @@ class LocalOCREngine:
         # Remove country badge 'IND' if present at start
         if clean.startswith("IND") and len(clean) > 5:
             clean = clean[3:]
+
+        # Fix State Code letter confusions (first 2 chars must be valid Indian State prefix)
+        if len(clean) >= 2:
+            st = clean[:2]
+            if st in ['NM', 'NH', 'MM', 'HN', 'HH', 'M1']: st = 'MH'
+            elif st in ['MR', 'MB', 'NP', 'HP', 'M0']: st = 'MP'
+            elif st in ['OL', 'OI', 'DI', '0L', 'D1']: st = 'DL'
+            elif st in ['PJ', 'RK', 'BJ', '0J', 'R1']: st = 'RJ'
+            elif st in ['VP', 'UR', 'IP', '0P', 'U1']: st = 'UP'
+            elif st in ['XA', 'HA', 'K1']: st = 'KA'
+            elif st in ['HK', 'HA', 'H1']: st = 'HR'
+            elif st in ['0D', 'O0']: st = 'OD'
+            elif st in ['P3', 'P8']: st = 'PB'
+            clean = st + clean[2:]
 
         # Search for standard Indian License Plate regex pattern:
         # State (2 letters) + RTO Code (1-2 digits) + Series (1-3 letters) + Number (1-4 digits)
@@ -171,22 +149,31 @@ class LocalOCREngine:
     def preprocess_roi(self, roi: np.ndarray):
         """
         Generates dynamic OpenCV image pre-processing variations for cropped plate ROI.
+        Strip outer plate border frame (10% inner crop) to isolate character shapes cleanly.
         """
         if roi is None or roi.size == 0:
             return []
 
-        if len(roi.shape) == 3:
-            gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-        else:
-            gray = roi
+        h, w = roi.shape[:2]
 
-        h, w = gray.shape
-        scale = 120.0 / max(h, 1)
-        new_w = int(w * scale)
-        new_h = int(h * scale)
+        # Use inner crop to remove dark outer borders
+        if h > 20 and w > 40:
+            inner = roi[int(h * 0.08):int(h * 0.92), int(w * 0.05):int(w * 0.95)]
+        else:
+            inner = roi
+
+        if len(inner.shape) == 3:
+            gray = cv2.cvtColor(inner, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = inner
+
+        h_g, w_g = gray.shape
+        scale = 120.0 / max(h_g, 1)
+        new_w = int(w_g * scale)
+        new_h = int(h_g * scale)
         resized = cv2.resize(gray, (max(new_w, 240), max(new_h, 80)), interpolation=cv2.INTER_CUBIC)
 
-        # Variation 1: Denoise + Otsu Binarization
+        # Variation 1: Bilateral Filter + Otsu Binarization
         denoised = cv2.bilateralFilter(resized, 11, 17, 17)
         _, otsu = cv2.threshold(denoised, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
@@ -210,51 +197,64 @@ class LocalOCREngine:
             return "", 0.0
 
         for thresh_img in variations[1:]:
-            contours, _ = cv2.findContours(thresh_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            h_img, w_img = thresh_img.shape
+            # Ensure character pixels are white on black background
+            if np.mean(thresh_img) > 127:
+                thresh_proc = cv2.bitwise_not(thresh_img)
+            else:
+                thresh_proc = thresh_img
+
+            contours, _ = cv2.findContours(thresh_proc, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            h_img, w_img = thresh_proc.shape
 
             char_boxes = []
             for c in contours:
-                x, y, w, h = cv2.boundingRect(c)
-                aspect = float(w) / h if h > 0 else 0
-                if 0.12 <= aspect <= 1.1 and 0.28 * h_img <= h <= 0.95 * h_img and w > 4:
-                    char_boxes.append((x, y, w, h))
+                x, y, w_b, h_b = cv2.boundingRect(c)
+                aspect = float(w_b) / h_b if h_b > 0 else 0
+                if 0.10 <= aspect <= 1.2 and 0.20 * h_img <= h_b <= 0.85 * h_img and 5 <= w_b <= 0.35 * w_img:
+                    char_boxes.append((x, y, w_b, h_b))
 
             if len(char_boxes) < 4:
                 continue
 
-            # Sort character contours left to right
+            # Sort left to right
             char_boxes.sort(key=lambda b: b[0])
 
-            # Filter overlapping character boxes
             filtered_boxes = []
-            for box in char_boxes:
+            for b in char_boxes:
                 if not filtered_boxes:
-                    filtered_boxes.append(box)
+                    filtered_boxes.append(b)
                 else:
                     prev_x, prev_y, prev_w, prev_h = filtered_boxes[-1]
-                    curr_x, curr_y, curr_w, curr_h = box
-                    if curr_x - prev_x >= int(prev_w * 0.3):
-                        filtered_boxes.append(box)
+                    if b[0] - prev_x >= int(prev_w * 0.35):
+                        filtered_boxes.append(b)
 
             recognized_chars = []
             match_scores = []
 
-            for (x, y, w, h) in filtered_boxes:
-                char_crop = thresh_img[y:y+h, x:x+w]
-                char_resized = cv2.resize(char_crop, (20, 30), interpolation=cv2.INTER_AREA)
+            for idx, (x, y, w_b, h_b) in enumerate(filtered_boxes):
+                char_crop = thresh_proc[y:y+h_b, x:x+w_b]
+                padded = cv2.copyMakeBorder(char_crop, 4, 4, 4, 4, cv2.BORDER_CONSTANT, value=0)
+                char_resized = cv2.resize(padded, (20, 30), interpolation=cv2.INTER_AREA)
+
+                # Position-aware search dictionary
+                if idx in [0, 1]:
+                    search_dict = LETTERS_TEMPLATES
+                elif idx in [2, 3]:
+                    search_dict = DIGITS_TEMPLATES
+                else:
+                    search_dict = OPENCV_TEMPLATES
 
                 best_char = "?"
                 best_score = -1.0
 
-                for char_key, tmpl in OPENCV_TEMPLATES.items():
+                for char_key, tmpl in search_dict.items():
                     res = cv2.matchTemplate(char_resized, tmpl, cv2.TM_CCOEFF_NORMED)
                     score = float(res[0][0])
                     if score > best_score:
                         best_score = score
                         best_char = char_key
 
-                if best_score > 0.15 and best_char != "?":
+                if best_score > 0.10 and best_char != "?":
                     recognized_chars.append(best_char)
                     match_scores.append(best_score)
 
@@ -262,7 +262,7 @@ class LocalOCREngine:
             cleaned = self.normalize_text(raw_str)
             if len(cleaned) >= 5:
                 avg_score = float(np.mean(match_scores)) * 100 if match_scores else 85.0
-                return cleaned, round(min(98.0, max(60.0, avg_score)), 1)
+                return cleaned, round(min(98.0, max(65.0, avg_score)), 1)
 
         return "", 0.0
 

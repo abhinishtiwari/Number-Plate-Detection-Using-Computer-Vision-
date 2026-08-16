@@ -53,11 +53,33 @@ class YOLOPlateDetector:
             except Exception as e:
                 print(f"[YOLO Inference] Note: {e}")
 
-        # 2. Real Haar Cascade Detection (Dynamic Confidence based on scale & neighbors)
+        # 2. Contour & High-Contrast Plate Geometry Detector (Primary CV Detector)
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+        bfilter = cv2.bilateralFilter(gray, 11, 17, 17)
+        edged = cv2.Canny(bfilter, 30, 200)
 
+        contours, _ = cv2.findContours(edged.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        contours = sorted(contours, key=cv2.contourArea, reverse=True)[:60]
+
+        for c in contours:
+            peri = cv2.arcLength(c, True)
+            approx = cv2.approxPolyDP(c, 0.018 * peri, True)
+            x, y, w, h = cv2.boundingRect(c)
+            aspect = float(w) / h if h > 0 else 0
+            area = cv2.contourArea(c)
+
+            if len(approx) >= 4 and 1.8 <= aspect <= 5.5 and 1200 <= area <= 80000:
+                roi_gray = gray[y:y+h, x:x+w]
+                if roi_gray.size > 0:
+                    std_val = float(np.std(roi_gray))
+                    mean_val = float(np.mean(roi_gray))
+                    # High contrast plate ROI (text vs background)
+                    if std_val > 25:
+                        score = min(0.98, max(0.70, 0.75 + (std_val / 200.0)))
+                        boxes.append((int(x), int(y), int(w), int(h), round(score, 3)))
+
+        # 3. Haar Cascade Detection Fallback
         if self.cascade and not self.cascade.empty():
-            # Run detectMultiScale with rejectLevels and levelWeights to get real confidence
             try:
                 rects, rejectLevels, levelWeights = self.cascade.detectMultiScale3(
                     gray,
@@ -67,36 +89,15 @@ class YOLOPlateDetector:
                     outputRejectLevels=True
                 )
                 for i, (x, y, w, h) in enumerate(rects):
-                    # Compute dynamic confidence score from cascade levelWeights
                     raw_score = float(levelWeights[i][0]) if len(levelWeights) > i else 1.0
-                    dynamic_conf = min(0.98, max(0.55, 0.50 + raw_score * 0.05))
+                    dynamic_conf = min(0.92, max(0.55, 0.50 + raw_score * 0.04))
                     boxes.append((int(x), int(y), int(w), int(h), dynamic_conf))
             except Exception:
                 cascade_plates = self.cascade.detectMultiScale(
                     gray, scaleFactor=1.08, minNeighbors=4, minSize=(36, 12)
                 )
                 for (x, y, w, h) in cascade_plates:
-                    boxes.append((int(x), int(y), int(w), int(h), 0.75))
-
-        # 3. Real Contour Geometry Detection (Dynamic Confidence based on edge sharpness & aspect ratio)
-        bfilter = cv2.bilateralFilter(gray, 11, 17, 17)
-        edged = cv2.Canny(bfilter, 30, 200)
-        contours, _ = cv2.findContours(edged.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-        contours = sorted(contours, key=cv2.contourArea, reverse=True)[:30]
-
-        for c in contours:
-            area = cv2.contourArea(c)
-            if area < 400 or area > 90000:
-                continue
-            x, y, w, h = cv2.boundingRect(c)
-            aspect_ratio = float(w) / h if h > 0 else 0
-            
-            # Typical Indian plate rectangular aspect ratio ~2.2 to 5.5
-            if 2.2 <= aspect_ratio <= 5.5:
-                extent = float(area) / (w * h)
-                if extent > 0.45: # Solid rectangular shape
-                    dynamic_conf = min(0.95, max(0.60, 0.50 + extent * 0.4))
-                    boxes.append((int(x), int(y), int(w), int(h), dynamic_conf))
+                    boxes.append((int(x), int(y), int(w), int(h), 0.70))
 
         # Non-Maximum Suppression to remove duplicate candidate boxes
         unique_boxes = self._nms(boxes)
