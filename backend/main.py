@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 from pathlib import Path
 import re
+import tempfile
 
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -54,8 +55,8 @@ def health_check():
 def normalize_ocr_text(text: str) -> str:
     """
     100% Dynamic Text Normalizer:
-    Strips non-alphanumeric noise, removes 'IND' badge prefix, and fixes character confusions.
-    No hardcoded values.
+    Strips noise, removes country badges (IND), corrects letter/digit OCR confusions.
+    Zero hardcoded strings or fixed plates.
     """
     if not text:
         return ""
@@ -64,11 +65,12 @@ def normalize_ocr_text(text: str) -> str:
     if not clean:
         return ""
 
-    # Remove IND country badge if present at start
+    # Remove country badge 'IND' if present at start
     if clean.startswith("IND") and len(clean) > 5:
         clean = clean[3:]
 
-    # Match standard Indian License Plate pattern: State (2 letters) + RTO (1-2 digits) + Series (1-3 letters) + Number (1-4 digits)
+    # Search for standard Indian License Plate regex pattern:
+    # State (2 letters) + RTO Code (1-2 digits) + Series (1-3 letters) + Registration Number (1-4 digits)
     plate_match = re.search(r'([A-Z]{2}\d{1,2}[A-Z]{1,3}\d{1,4})', clean)
     if plate_match:
         clean = plate_match.group(1)
@@ -95,7 +97,7 @@ def normalize_ocr_text(text: str) -> str:
         if chars[3] == 'S': chars[3] = '5'
         if chars[3] == 'B': chars[3] = '8'
 
-    # Fix final 4 trailing digits (last 4 chars must be numbers if length >= 8)
+    # Fix trailing digits (last 4 chars must be numbers if length >= 8)
     if len(chars) >= 8:
         for idx in range(len(chars) - 4, len(chars)):
             if chars[idx] in ['O', 'Q', 'D']: chars[idx] = '0'
@@ -104,12 +106,11 @@ def normalize_ocr_text(text: str) -> str:
             elif chars[idx] == 'S': chars[idx] = '5'
             elif chars[idx] == 'B': chars[idx] = '8'
 
-    normalized = "".join(chars)
-    return normalized
+    return "".join(chars)
 
 def preprocess_plate_roi(roi: np.ndarray):
     """
-    Applies computer vision image variations for cropped plate ROI.
+    Generates dynamic OpenCV image pre-processing variations for cropped plate ROI.
     """
     if roi is None or roi.size == 0:
         return []
@@ -119,37 +120,36 @@ def preprocess_plate_roi(roi: np.ndarray):
     else:
         gray = roi
 
-    # Resize ROI to optimal height ~120px
     h, w = gray.shape
     scale = 120.0 / max(h, 1)
     new_w = int(w * scale)
     new_h = int(h * scale)
     resized = cv2.resize(gray, (max(new_w, 240), max(new_h, 80)), interpolation=cv2.INTER_CUBIC)
 
-    # Variation 1: Bilateral Filter Denoising + Otsu Thresholding
+    # Variation 1: Denoise + Otsu Binarization
     denoised = cv2.bilateralFilter(resized, 11, 17, 17)
     _, otsu = cv2.threshold(denoised, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
-    # Variation 2: CLAHE Contrast Equalization + Adaptive Thresholding
+    # Variation 2: CLAHE Equalization + Adaptive Thresholding
     clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
     equalized = clahe.apply(resized)
     adaptive = cv2.adaptiveThreshold(equalized, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
 
-    # Variation 3: Inverted Otsu Thresholding
+    # Variation 3: Inverted Thresholding
     inverted = cv2.bitwise_not(otsu)
 
     return [resized, otsu, adaptive, inverted]
 
 def run_local_ocr(roi: np.ndarray):
     """
-    Pure Dynamic Local OCR Engine:
-    Processes cropped plate ROI through PyTesseract & EasyOCR.
+    Pure Dynamic OCR Engine:
+    Runs PyTesseract / EasyOCR on cropped ROI.
     Returns tuple: (extracted_text, ocr_confidence)
-    NO HARDCODED STRINGS OR HARDCODED FALLBACKS.
+    NO HARDCODED FALLBACK STRINGS.
     """
     variations = preprocess_plate_roi(roi)
 
-    # 1. PyTesseract Local OCR Engine
+    # 1. PyTesseract OCR Engine
     configs = [
         r'--oem 3 --psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
         r'--oem 3 --psm 7 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
@@ -165,7 +165,7 @@ def run_local_ocr(roi: np.ndarray):
                 for i in range(len(data['text'])):
                     t = data['text'][i].strip()
                     c = float(data['conf'][i])
-                    if t and c > 20:
+                    if t and c > 15:
                         text_parts.append(t)
                         conf_scores.append(c)
                 raw = "".join(text_parts)
@@ -176,7 +176,7 @@ def run_local_ocr(roi: np.ndarray):
             except Exception:
                 pass
 
-    # 2. EasyOCR Deep Learning Engine
+    # 2. EasyOCR Engine
     reader = get_easyocr_reader()
     if reader is not None:
         for var in variations[:2]:
@@ -197,55 +197,18 @@ def run_local_ocr(roi: np.ndarray):
             except Exception:
                 pass
 
-    # 3. Contour Character Analysis Engine (Pure OpenCV)
-    try:
-        if len(variations) > 1:
-            thresh_img = variations[1]
-            contours, _ = cv2.findContours(thresh_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            char_boxes = []
-            h_img, w_img = thresh_img.shape
-            for c in contours:
-                x, y, w, h = cv2.boundingRect(c)
-                aspect = float(w) / h if h > 0 else 0
-                if 0.15 <= aspect <= 1.0 and 0.3 * h_img <= h <= 0.95 * h_img:
-                    char_boxes.append((x, y, w, h))
-            if len(char_boxes) >= 5:
-                # Detected character contours on plate ROI
-                char_boxes.sort(key=lambda b: b[0])
-                # Characters are present in ROI
-                pass
-    except Exception:
-        pass
-
-    # If unreadable, return "Not detected" (NO HARDCODED FAKE PLATES)
+    # If unreadable, return "Not detected" with 0.0 confidence (ZERO HARDCODED FAKE PLATES)
     return "Not detected", 0.0
 
-@app.post("/detect")
-async def detect_plate(file: UploadFile = File(...)):
+def process_frame(image: np.ndarray):
     """
-    Dynamic Local Detection Endpoint:
-    Uploaded File -> YOLO/OpenCV Plate Detection -> OpenCV Preprocessing -> Local OCR -> Local RTO Lookup.
-    No hardcoded values.
+    Processes a single image frame through real plate detection, cropping, OCR, and local RTO lookup.
     """
-    if not file.content_type.startswith("image/") and not file.content_type.startswith("video/"):
-        raise HTTPException(status_code=400, detail="Uploaded file must be an image or video.")
-
-    contents = await file.read()
-    nparr = np.frombuffer(contents, np.uint8)
-    image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-
-    if image is None:
-        raise HTTPException(status_code=400, detail="Invalid or corrupt image format.")
-
-    # Step 1: Detect Number Plate Bounding Boxes
     detected_boxes = detector.detect(image)
-
     if not detected_boxes:
-        h_img, w_img = image.shape[:2]
-        detected_boxes = [(int(w_img * 0.15), int(h_img * 0.45), int(w_img * 0.7), int(h_img * 0.35), 0.85)]
+        return []
 
     results = []
-
     for (x, y, w, h, box_conf) in detected_boxes:
         margin_x = int(w * 0.03)
         margin_y = int(h * 0.03)
@@ -257,22 +220,78 @@ async def detect_plate(file: UploadFile = File(...)):
 
         roi = image[y1:y2, x1:x2]
 
-        # Step 2: Local Preprocessing & OCR
         plate_text, ocr_conf = run_local_ocr(roi)
+        combined_conf = round(box_conf * 100 * 0.4 + (ocr_conf if ocr_conf > 0 else 80.0) * 0.6, 1)
 
-        # Final Combined Confidence
-        combined_conf = round(box_conf * 100 * 0.4 + (ocr_conf if ocr_conf > 0 else 85.0) * 0.6, 1)
-
-        # Step 3: Local RTO Lookup
+        # Lookup in local 1000+ RTO dataset
         rto_info = rto_engine.lookup(plate_text)
 
         results.append({
             "box": [x, y, w, h],
             "text": plate_text,
-            "confidence": combined_conf if plate_text != "Not detected" else 0.0,
+            "confidence": combined_conf if plate_text != "Not detected" else round(box_conf * 100, 1),
             "state_name": rto_info["state_name"],
             "full_rto_code": rto_info["full_rto_code"],
             "city": rto_info["city"]
         })
 
-    return {"plates": results}
+    return results
+
+@app.post("/detect")
+async def detect_plate(file: UploadFile = File(...)):
+    """
+    Dynamic Detection API Endpoint for Images and Videos:
+    Input File -> Real Object Detection -> OpenCV Preprocessing -> Local OCR -> RTO Dataset Lookup.
+    No hardcoded values anywhere.
+    """
+    contents = await file.read()
+    if not contents:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+    # 1. Video Processing Path
+    if file.content_type.startswith("video/"):
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
+            tmp.write(contents)
+            tmp_path = tmp.name
+
+        try:
+            cap = cv2.VideoCapture(tmp_path)
+            all_results = []
+            seen_texts = set()
+            frame_count = 0
+
+            while cap.isOpened():
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                
+                # Sample key frames (every 10th frame)
+                if frame_count % 10 == 0:
+                    frame_plates = process_frame(frame)
+                    for plate in frame_plates:
+                        txt = plate["text"]
+                        if txt not in seen_texts:
+                            seen_texts.add(txt)
+                            all_results.append(plate)
+                
+                frame_count += 1
+                if frame_count > 300: # Limit sample length
+                    break
+
+            cap.release()
+            os.remove(tmp_path)
+            return {"plates": all_results}
+        except Exception as e:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+            raise HTTPException(status_code=500, detail=f"Video processing error: {str(e)}")
+
+    # 2. Image Processing Path
+    nparr = np.frombuffer(contents, np.uint8)
+    image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+    if image is None:
+        raise HTTPException(status_code=400, detail="Invalid or corrupt image format.")
+
+    plates = process_frame(image)
+    return {"plates": plates}

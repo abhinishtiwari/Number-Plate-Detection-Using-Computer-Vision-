@@ -52,7 +52,7 @@ const uniqueVehiclesVal = document.getElementById("uniqueVehiclesVal");
 
 let selectedFile = null;
 let isVideoMode = false;
-let detectionHistory = JSON.parse(localStorage.getItem("anpr_history_v3") || "[]");
+let detectionHistory = JSON.parse(localStorage.getItem("anpr_history_v4") || "[]");
 
 // Initial Clean Idle State
 resetDetectionResults();
@@ -140,7 +140,7 @@ function handleFileSelect(file) {
     resultCanvas.classList.remove("hidden");
     previewContainer.classList.remove("hidden");
 
-    // Preview image on canvas
+    // Preview raw uploaded image on canvas (without bounding boxes until detection is triggered)
     const reader = new FileReader();
     reader.onload = (e) => {
       const img = new Image();
@@ -209,9 +209,9 @@ detectBtn.addEventListener("click", async () => {
     } else {
       updateResultCard({
         text: "Not detected",
-        state_name: "Unknown",
-        full_rto_code: "Unknown",
-        city: "Unknown",
+        state_name: "Not detected",
+        full_rto_code: "Not detected",
+        city: "Not detected",
         confidence: 0.0
       });
       showStatus("No license plates detected in the uploaded file.", "info", false);
@@ -233,9 +233,9 @@ function updateResultCard(match) {
   resultStatusBadge.textContent = isDetected ? "Success" : "Not Detected";
 
   resPlateText.textContent = match.text || "Not detected";
-  resState.textContent = match.state_name || "Unknown";
-  resRtoCode.textContent = match.full_rto_code || "Unknown";
-  resCity.textContent = match.city || "Unknown";
+  resState.textContent = match.state_name || "Not detected";
+  resRtoCode.textContent = match.full_rto_code || "Not detected";
+  resCity.textContent = match.city || "Not detected";
   
   const confVal = match.confidence ? match.confidence.toFixed(1) : "0.0";
   resConfidence.textContent = `${confVal}%`;
@@ -307,7 +307,7 @@ function addRecentDetection(item) {
 
   detectionHistory.unshift(newDetection);
   if (detectionHistory.length > 10) detectionHistory.pop();
-  localStorage.setItem("anpr_history_v3", JSON.stringify(detectionHistory));
+  localStorage.setItem("anpr_history_v4", JSON.stringify(detectionHistory));
   renderRecentDetections();
 }
 
@@ -345,7 +345,7 @@ if (clearHistoryBtn) {
   clearHistoryBtn.addEventListener("click", (e) => {
     e.preventDefault();
     detectionHistory = [];
-    localStorage.removeItem("anpr_history_v3");
+    localStorage.removeItem("anpr_history_v4");
     renderRecentDetections();
   });
 }
