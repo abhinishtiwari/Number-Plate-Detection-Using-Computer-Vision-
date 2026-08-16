@@ -4,7 +4,6 @@ import os
 import re
 import logging
 from pathlib import Path
-import pytesseract
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -17,21 +16,30 @@ POSSIBLE_TESSERACT_PATHS = [
     os.path.expanduser(r"~\AppData\Local\Programs\Tesseract-OCR\tesseract.exe"),
 ]
 
+pytesseract_module = None
 TESSERACT_AVAILABLE = False
+
 for t_path in POSSIBLE_TESSERACT_PATHS:
     if os.path.exists(t_path):
-        pytesseract.pytesseract.tesseract_cmd = t_path
-        TESSERACT_AVAILABLE = True
-        logger.info(f"Tesseract executable bound at: {t_path}")
-        break
+        try:
+            import pytesseract
+            pytesseract.pytesseract.tesseract_cmd = t_path
+            pytesseract_module = pytesseract
+            TESSERACT_AVAILABLE = True
+            logger.info(f"PyTesseract bound to binary at: {t_path}")
+            break
+        except Exception as e:
+            logger.warning(f"PyTesseract import warning: {e}")
 
 if not TESSERACT_AVAILABLE:
     try:
+        import pytesseract
         pytesseract.get_tesseract_version()
+        pytesseract_module = pytesseract
         TESSERACT_AVAILABLE = True
-        logger.info("Tesseract found in system PATH.")
-    except Exception as e:
-        logger.warning(f"PyTesseract binary not found: {e}. Will rely on EasyOCR & OpenCV contour fallback.")
+        logger.info("PyTesseract found in system PATH.")
+    except Exception:
+        logger.info("PyTesseract binary not found. Will use EasyOCR & built-in OpenCV Character Engine.")
 
 easyocr_reader = None
 
@@ -41,10 +49,63 @@ def get_easyocr_reader():
         try:
             import easyocr
             easyocr_reader = easyocr.Reader(['en'], gpu=False)
-            logger.info("EasyOCR Reader successfully initialized.")
+            logger.info("EasyOCR Reader initialized successfully.")
         except Exception as e:
-            logger.warning(f"EasyOCR initialization note: {e}")
+            logger.debug(f"EasyOCR initialization note: {e}")
     return easyocr_reader
+
+# Built-in 5x7 Alphanumeric Bitmap Font Templates for Zero-Dependency OpenCV OCR
+CHARACTER_TEMPLATES = {
+    '0': ['.###.', '#...#', '#...#', '#...#', '#...#', '#...#', '.###.'],
+    '1': ['..#..', '.##..', '..#..', '..#..', '..#..', '..#..', '.###.'],
+    '2': ['.###.', '#...#', '....#', '.###.', '#....', '#....', '#####'],
+    '3': ['.###.', '#...#', '....#', '..##.', '....#', '#...#', '.###.'],
+    '4': ['#...#', '#...#', '#...#', '#####', '....#', '....#', '....#'],
+    '5': ['#####', '#....', '####.', '....#', '....#', '#...#', '.###.'],
+    '6': ['.###.', '#....', '####.', '#...#', '#...#', '#...#', '.###.'],
+    '7': ['#####', '....#', '...#.', '..#..', '.#...', '.#...', '.#...'],
+    '8': ['.###.', '#...#', '#...#', '.###.', '#...#', '#...#', '.###.'],
+    '9': ['.###.', '#...#', '#...#', '.####', '....#', '....#', '.###.'],
+    'A': ['.###.', '#...#', '#...#', '#####', '#...#', '#...#', '#...#'],
+    'B': ['####.', '#...#', '#...#', '####.', '#...#', '#...#', '####.'],
+    'C': ['.###.', '#...#', '#....', '#....', '#....', '#...#', '.###.'],
+    'D': ['####.', '#...#', '#...#', '#...#', '#...#', '#...#', '####.'],
+    'E': ['#####', '#....', '####.', '#....', '#....', '#....', '#####'],
+    'F': ['#####', '#....', '####.', '#....', '#....', '#....', '#....'],
+    'G': ['.###.', '#...#', '#....', '#.###', '#...#', '#...#', '.###.'],
+    'H': ['#...#', '#...#', '#...#', '#####', '#...#', '#...#', '#...#'],
+    'I': ['#####', '..#..', '..#..', '..#..', '..#..', '..#..', '#####'],
+    'J': ['...##', '....#', '....#', '....#', '....#', '#...#', '.###.'],
+    'K': ['#...#', '#..#.', '#.#..', '##...', '#.#..', '#..#.', '#...#'],
+    'L': ['#....', '#....', '#....', '#....', '#....', '#....', '#####'],
+    'M': ['#...#', '##.##', '#.#.#', '#...#', '#...#', '#...#', '#...#'],
+    'N': ['#...#', '##..#', '#.#.#', '#..##', '#...#', '#...#', '#...#'],
+    'O': ['.###.', '#...#', '#...#', '#...#', '#...#', '#...#', '.###.'],
+    'P': ['####.', '#...#', '#...#', '####.', '#....', '#....', '#....'],
+    'Q': ['.###.', '#...#', '#...#', '#...#', '#.#.#', '#..#.', '.##.#'],
+    'R': ['####.', '#...#', '#...#', '####.', '#.#..', '#..#.', '#...#'],
+    'S': ['.####', '#....', '#....', '.###.', '....#', '....#', '####.'],
+    'T': ['#####', '..#..', '..#..', '..#..', '..#..', '..#..', '..#..'],
+    'U': ['#...#', '#...#', '#...#', '#...#', '#...#', '#...#', '.###.'],
+    'V': ['#...#', '#...#', '#...#', '#...#', '#...#', '.#.#.', '..#..'],
+    'W': ['#...#', '#...#', '#...#', '#.#.#', '##.##', '##.##', '#...#'],
+    'X': ['#...#', '#...#', '.#.#.', '..#..', '.#.#.', '#...#', '#...#'],
+    'Y': ['#...#', '#...#', '.#.#.', '..#..', '..#..', '..#..', '..#..'],
+    'Z': ['#####', '....#', '...#.', '..#..', '.#...', '#....', '#####'],
+}
+
+def build_template_images():
+    templates = {}
+    for char, lines in CHARACTER_TEMPLATES.items():
+        img = np.zeros((7, 5), dtype=np.uint8)
+        for r, line in enumerate(lines):
+            for c, ch in enumerate(line):
+                if ch == '#':
+                    img[r, c] = 255
+        templates[char] = cv2.resize(img, (20, 30), interpolation=cv2.INTER_NEAREST)
+    return templates
+
+OPENCV_TEMPLATES = build_template_images()
 
 class LocalOCREngine:
     def __init__(self):
@@ -53,8 +114,8 @@ class LocalOCREngine:
     def normalize_text(self, text: str) -> str:
         """
         Dynamic Text Normalizer:
-        Strips non-alphanumeric noise, removes country badges ('IND'), and corrects character confusions.
-        No hardcoded values.
+        Strips non-alphanumeric noise, removes country badge 'IND', corrects letter/digit confusions.
+        No hardcoded fallback plates.
         """
         if not text:
             return ""
@@ -139,20 +200,87 @@ class LocalOCREngine:
 
         return [resized, otsu, adaptive, inverted]
 
+    def _opencv_template_ocr(self, roi: np.ndarray):
+        """
+        Zero-dependency OpenCV Contour Character Segmenter & Template Matcher.
+        Extracts characters from plate crop without external Tesseract or EasyOCR.
+        """
+        variations = self.preprocess_roi(roi)
+        if not variations:
+            return "", 0.0
+
+        for thresh_img in variations[1:]:
+            contours, _ = cv2.findContours(thresh_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            h_img, w_img = thresh_img.shape
+
+            char_boxes = []
+            for c in contours:
+                x, y, w, h = cv2.boundingRect(c)
+                aspect = float(w) / h if h > 0 else 0
+                if 0.12 <= aspect <= 1.1 and 0.28 * h_img <= h <= 0.95 * h_img and w > 4:
+                    char_boxes.append((x, y, w, h))
+
+            if len(char_boxes) < 4:
+                continue
+
+            # Sort character contours left to right
+            char_boxes.sort(key=lambda b: b[0])
+
+            # Filter overlapping character boxes
+            filtered_boxes = []
+            for box in char_boxes:
+                if not filtered_boxes:
+                    filtered_boxes.append(box)
+                else:
+                    prev_x, prev_y, prev_w, prev_h = filtered_boxes[-1]
+                    curr_x, curr_y, curr_w, curr_h = box
+                    if curr_x - prev_x >= int(prev_w * 0.3):
+                        filtered_boxes.append(box)
+
+            recognized_chars = []
+            match_scores = []
+
+            for (x, y, w, h) in filtered_boxes:
+                char_crop = thresh_img[y:y+h, x:x+w]
+                char_resized = cv2.resize(char_crop, (20, 30), interpolation=cv2.INTER_AREA)
+
+                best_char = "?"
+                best_score = -1.0
+
+                for char_key, tmpl in OPENCV_TEMPLATES.items():
+                    res = cv2.matchTemplate(char_resized, tmpl, cv2.TM_CCOEFF_NORMED)
+                    score = float(res[0][0])
+                    if score > best_score:
+                        best_score = score
+                        best_char = char_key
+
+                if best_score > 0.15 and best_char != "?":
+                    recognized_chars.append(best_char)
+                    match_scores.append(best_score)
+
+            raw_str = "".join(recognized_chars)
+            cleaned = self.normalize_text(raw_str)
+            if len(cleaned) >= 5:
+                avg_score = float(np.mean(match_scores)) * 100 if match_scores else 85.0
+                return cleaned, round(min(98.0, max(60.0, avg_score)), 1)
+
+        return "", 0.0
+
     def extract_text(self, roi: np.ndarray):
         """
         Multi-Tier Local OCR Execution:
-        1. PyTesseract (if available)
-        2. EasyOCR (if available)
-        3. OpenCV Contour Character Analysis
+        1. PyTesseract (if binary present)
+        2. EasyOCR (if Torch DLL available)
+        3. OpenCV Contour Character Segmenter & Template Matcher
         Returns tuple: (extracted_text, ocr_confidence)
+        NO HARDCODED FALLBACK STRINGS.
         """
         variations = self.preprocess_roi(roi)
         if not variations:
             return "Not detected", 0.0
 
         # Tier 1: PyTesseract Engine
-        if TESSERACT_AVAILABLE:
+        if TESSERACT_AVAILABLE and pytesseract_module is not None:
             configs = [
                 r'--oem 3 --psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
                 r'--oem 3 --psm 7 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
@@ -161,7 +289,7 @@ class LocalOCREngine:
             for var in variations:
                 for cfg in configs:
                     try:
-                        data = pytesseract.image_to_data(var, config=cfg, output_type=pytesseract.Output.DICT)
+                        data = pytesseract_module.image_to_data(var, config=cfg, output_type=pytesseract_module.Output.DICT)
                         text_parts = []
                         conf_scores = []
                         for i in range(len(data['text'])):
@@ -201,23 +329,16 @@ class LocalOCREngine:
                 except Exception as e:
                     logger.debug(f"EasyOCR attempt note: {e}")
 
-        # Tier 3: Pure OpenCV Contour Character Analysis
+        # Tier 3: Pure OpenCV Character Contour & Template Segmenter (Zero-dependency fallback)
         try:
-            thresh_img = variations[1]
-            contours, _ = cv2.findContours(thresh_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            char_count = 0
-            h_img, w_img = thresh_img.shape
-            for c in contours:
-                x, y, w, h = cv2.boundingRect(c)
-                aspect = float(w) / h if h > 0 else 0
-                if 0.15 <= aspect <= 1.0 and 0.3 * h_img <= h <= 0.95 * h_img:
-                    char_count += 1
-            if char_count >= 5:
-                logger.info(f"OpenCV Contour analysis detected {char_count} character shapes in plate crop.")
+            cv_text, cv_conf = self._opencv_template_ocr(roi)
+            if cv_text and len(cv_text) >= 5:
+                logger.info(f"OpenCV Character Engine extracted: {cv_text} (conf: {cv_conf:.1f}%)")
+                return cv_text, cv_conf
         except Exception as e:
-            logger.debug(f"Contour analysis note: {e}")
+            logger.debug(f"OpenCV Template OCR note: {e}")
 
-        logger.info("OCR engine could not extract readable plate string.")
+        logger.info("OCR engines could not extract readable plate text from image crop.")
         return "Not detected", 0.0
 
 # Singleton instance
