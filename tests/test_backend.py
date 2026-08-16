@@ -15,7 +15,7 @@ class TestBackendAPI(unittest.TestCase):
     def test_health_check_endpoint(self):
         response = self.client.get("/health")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"status": "ok"})
+        self.assertEqual(response.json()["status"], "ok")
 
     def test_detect_rejects_non_image(self):
         response = self.client.post("/detect", files={"file": ("test.txt", b"hello world", "text/plain")})

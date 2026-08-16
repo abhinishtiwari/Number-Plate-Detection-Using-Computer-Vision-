@@ -1,7 +1,10 @@
 import csv
 import json
 import re
+import logging
 from pathlib import Path
+
+logger = logging.getLogger("RTOLookup")
 
 BASE_DIR = Path(__file__).resolve().parent
 RTO_DB_JSON = BASE_DIR / "data" / "rto_database.json"
@@ -25,6 +28,7 @@ class RTOLookupEngine:
     def __init__(self, db_path=None):
         self.db_path = Path(db_path) if db_path else RTO_DB_JSON
         self.rto_map = {}
+        self.all_records = []
         self._load_database()
 
     def _load_database(self):
@@ -33,13 +37,15 @@ class RTOLookupEngine:
             try:
                 with open(RTO_DB_JSON, 'r', encoding='utf-8') as f:
                     records = json.load(f)
+                    self.all_records = records
                     for item in records:
                         prefix = item.get("registration_prefix", "").upper()
                         if prefix:
                             self.rto_map[prefix] = item
+                logger.info(f"Loaded {len(self.all_records)} RTO dataset entries from JSON.")
                 return
             except Exception as e:
-                print(f"[RTOLookup] Error loading JSON database: {e}")
+                logger.error(f"Error loading JSON database: {e}")
 
         if RTO_DB_CSV.exists():
             try:
@@ -47,17 +53,24 @@ class RTOLookupEngine:
                     reader = csv.DictReader(f)
                     for row in reader:
                         prefix = row.get("registration_prefix", "").strip().upper()
+                        item = {
+                            "state_code": row.get("state_code", "").strip(),
+                            "state_name": row.get("state_name", "").strip(),
+                            "rto_code": row.get("rto_code", "").strip(),
+                            "full_rto_code": row.get("full_rto_code", "").strip(),
+                            "registration_prefix": prefix,
+                            "city": row.get("city", "").strip()
+                        }
                         if prefix:
-                            self.rto_map[prefix] = {
-                                "state_code": row.get("state_code", "").strip(),
-                                "state_name": row.get("state_name", "").strip(),
-                                "rto_code": row.get("rto_code", "").strip(),
-                                "full_rto_code": row.get("full_rto_code", "").strip(),
-                                "registration_prefix": prefix,
-                                "city": row.get("city", "").strip()
-                            }
+                            self.rto_map[prefix] = item
+                            self.all_records.append(item)
+                logger.info(f"Loaded {len(self.all_records)} RTO dataset entries from CSV.")
             except Exception as e:
-                print(f"[RTOLookup] Error loading CSV database: {e}")
+                logger.error(f"Error loading CSV database: {e}")
+
+    def get_all_records(self):
+        """Returns full dataset for dynamic frontend table rendering."""
+        return self.all_records
 
     def lookup(self, plate_text: str):
         """

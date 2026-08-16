@@ -3,7 +3,7 @@
  * NUMBER PLATE AI - REAL DYNAMIC COMPUTER VISION DASHBOARD
  * ===================================================================
  */
-const PRODUCTION_API_URL = "https://your-backend.onrender.com";
+const PRODUCTION_API_URL = "http://127.0.0.1:8000";
 
 const API_URL = (
   window.location.hostname === "localhost" ||
@@ -30,18 +30,14 @@ const previewContainer = document.getElementById("previewContainer");
 const resultCanvas = document.getElementById("resultCanvas");
 const videoPreview = document.getElementById("videoPreview");
 
-// Derived Detection Result Card Elements
+// Result Cards Container & Status
 const resultStatusBadge = document.getElementById("resultStatusBadge");
-const resPlateText = document.getElementById("resPlateText");
-const resState = document.getElementById("resState");
-const resRtoCode = document.getElementById("resRtoCode");
-const resCity = document.getElementById("resCity");
-const resConfidence = document.getElementById("resConfidence");
-const confProgressBar = document.getElementById("confProgressBar");
+const resultCardsList = document.getElementById("resultCardsList");
 
 // Stats & Controls
 const rtoSearchInput = document.getElementById("rtoSearchInput");
 const rtoTableBody = document.getElementById("rtoTableBody");
+const rtoRecordCountBadge = document.getElementById("rtoRecordCountBadge");
 const recentDetectionsList = document.getElementById("recentDetectionsList");
 const clearHistoryBtn = document.getElementById("clearHistoryBtn");
 const themeToggleBtn = document.getElementById("themeToggleBtn");
@@ -52,11 +48,13 @@ const uniqueVehiclesVal = document.getElementById("uniqueVehiclesVal");
 
 let selectedFile = null;
 let isVideoMode = false;
-let detectionHistory = JSON.parse(localStorage.getItem("anpr_history_v4") || "[]");
+let detectionHistory = JSON.parse(localStorage.getItem("anpr_history_v5") || "[]");
+let fullRtoDataset = [];
 
-// Initial Clean Idle State
+// Initialize Clean Idle State & Fetch Dynamic RTO Dataset
 resetDetectionResults();
 renderRecentDetections();
+fetchRtoDataset();
 
 // Theme Toggle
 themeToggleBtn.addEventListener("click", () => {
@@ -101,15 +99,87 @@ dropZone.addEventListener("drop", (e) => {
   }
 });
 
+/**
+ * Fetch and Render RTO Reference Dataset Dynamically
+ */
+async function fetchRtoDataset() {
+  try {
+    const response = await fetch(`${API_URL}/rto-dataset`);
+    if (response.ok) {
+      fullRtoDataset = await response.json();
+      renderRtoTable(fullRtoDataset.slice(0, 100)); // Render first 100 entries for optimal performance
+      if (rtoRecordCountBadge) {
+        rtoRecordCountBadge.textContent = `${fullRtoDataset.length.toLocaleString()} Records`;
+      }
+    }
+  } catch (err) {
+    console.warn("RTO Dataset fetch note:", err);
+  }
+}
+
+function renderRtoTable(records) {
+  if (!rtoTableBody) return;
+  rtoTableBody.innerHTML = "";
+
+  records.forEach((row) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="bold-text">${row.registration_prefix}</td>
+      <td>${row.state_name}</td>
+      <td>${row.city}</td>
+    `;
+    rtoTableBody.appendChild(tr);
+  });
+}
+
+// RTO Table Real-time Search Filter
+rtoSearchInput.addEventListener("input", (e) => {
+  const query = e.target.value.toLowerCase().trim();
+  if (!query) {
+    renderRtoTable(fullRtoDataset.slice(0, 100));
+    return;
+  }
+
+  const filtered = fullRtoDataset.filter((row) => (
+    row.registration_prefix.toLowerCase().includes(query) ||
+    row.state_name.toLowerCase().includes(query) ||
+    row.city.toLowerCase().includes(query)
+  ));
+  renderRtoTable(filtered.slice(0, 100));
+});
+
 function resetDetectionResults() {
   resultStatusBadge.className = "badge-idle";
   resultStatusBadge.textContent = "Idle";
-  resPlateText.textContent = "--";
-  resState.textContent = "--";
-  resRtoCode.textContent = "--";
-  resCity.textContent = "--";
-  resConfidence.textContent = "0%";
-  confProgressBar.style.width = "0%";
+  resultCardsList.innerHTML = `
+    <div class="result-details">
+      <div class="detail-row highlight-row">
+        <span class="detail-label">💳 Number Plate</span>
+        <span class="detail-val plate-green" id="resPlateText">--</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">🏛️ State</span>
+        <span class="detail-val" id="resState">--</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">🏷️ RTO Code</span>
+        <span class="detail-val" id="resRtoCode">--</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">📍 Registration City</span>
+        <span class="detail-val" id="resCity">--</span>
+      </div>
+      <div class="detail-row flex-col">
+        <div class="flex-between">
+          <span class="detail-label">🎯 Detection Confidence</span>
+          <span class="detail-val bold" id="resConfidence">0%</span>
+        </div>
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" id="confProgressBar" style="width: 0%;"></div>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 function handleFileSelect(file) {
@@ -202,12 +272,11 @@ detectBtn.addEventListener("click", async () => {
     showStatus("Detection complete!", "success", false);
 
     if (data.plates && data.plates.length > 0) {
-      const primaryPlate = data.plates[0];
-      updateResultCard(primaryPlate);
+      renderMultiPlateResults(data.plates);
       renderCanvasOverlay(selectedFile, data.plates);
-      addRecentDetection(primaryPlate);
+      data.plates.forEach(p => addRecentDetection(p));
     } else {
-      updateResultCard({
+      updateSingleResultCard({
         text: "Not detected",
         state_name: "Not detected",
         full_rto_code: "Not detected",
@@ -227,19 +296,58 @@ detectBtn.addEventListener("click", async () => {
   }
 });
 
-function updateResultCard(match) {
-  const isDetected = match.text && match.text !== "Not detected";
+function renderMultiPlateResults(plates) {
+  const isDetected = plates.some(p => p.text && p.text !== "Not detected");
   resultStatusBadge.className = isDetected ? "badge-success" : "badge-idle";
-  resultStatusBadge.textContent = isDetected ? "Success" : "Not Detected";
+  resultStatusBadge.textContent = isDetected ? `Detected (${plates.length})` : "Not Detected";
 
-  resPlateText.textContent = match.text || "Not detected";
-  resState.textContent = match.state_name || "Not detected";
-  resRtoCode.textContent = match.full_rto_code || "Not detected";
-  resCity.textContent = match.city || "Not detected";
-  
-  const confVal = match.confidence ? match.confidence.toFixed(1) : "0.0";
-  resConfidence.textContent = `${confVal}%`;
-  confProgressBar.style.width = `${confVal}%`;
+  resultCardsList.innerHTML = "";
+
+  plates.forEach((match, idx) => {
+    const cardDiv = document.createElement("div");
+    cardDiv.className = "result-details";
+    if (idx > 0) cardDiv.style.marginTop = "14px";
+
+    const confVal = match.confidence ? match.confidence.toFixed(1) : "0.0";
+    const plateText = match.text || "Not detected";
+    const stateName = match.state_name || "Not detected";
+    const rtoCode = match.full_rto_code || "Not detected";
+    const city = match.city || "Not detected";
+
+    cardDiv.innerHTML = `
+      ${plates.length > 1 ? `<div class="detail-row"><span class="detail-label bold">🚘 Vehicle #${idx + 1}</span></div>` : ""}
+      <div class="detail-row highlight-row">
+        <span class="detail-label">💳 Number Plate</span>
+        <span class="detail-val plate-green">${plateText}</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">🏛️ State</span>
+        <span class="detail-val">${stateName}</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">🏷️ RTO Code</span>
+        <span class="detail-val">${rtoCode}</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">📍 Registration City</span>
+        <span class="detail-val">${city}</span>
+      </div>
+      <div class="detail-row flex-col">
+        <div class="flex-between">
+          <span class="detail-label">🎯 Detection Confidence</span>
+          <span class="detail-val bold">${confVal}%</span>
+        </div>
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" style="width: ${confVal}%;"></div>
+        </div>
+      </div>
+    `;
+    resultCardsList.appendChild(cardDiv);
+  });
+}
+
+function updateSingleResultCard(match) {
+  renderMultiPlateResults([match]);
 }
 
 function renderCanvasOverlay(file, plates) {
@@ -282,16 +390,6 @@ function renderCanvasOverlay(file, plates) {
   reader.readAsDataURL(file);
 }
 
-// RTO Table Search Filtering
-rtoSearchInput.addEventListener("input", (e) => {
-  const query = e.target.value.toLowerCase();
-  const rows = rtoTableBody.querySelectorAll("tr");
-  rows.forEach((row) => {
-    const text = row.textContent.toLowerCase();
-    row.style.display = text.includes(query) ? "" : "none";
-  });
-});
-
 // Recent Detections List & LocalStorage History
 function addRecentDetection(item) {
   const plate = item.text || "Not detected";
@@ -307,7 +405,7 @@ function addRecentDetection(item) {
 
   detectionHistory.unshift(newDetection);
   if (detectionHistory.length > 10) detectionHistory.pop();
-  localStorage.setItem("anpr_history_v4", JSON.stringify(detectionHistory));
+  localStorage.setItem("anpr_history_v5", JSON.stringify(detectionHistory));
   renderRecentDetections();
 }
 
@@ -345,7 +443,7 @@ if (clearHistoryBtn) {
   clearHistoryBtn.addEventListener("click", (e) => {
     e.preventDefault();
     detectionHistory = [];
-    localStorage.removeItem("anpr_history_v4");
+    localStorage.removeItem("anpr_history_v5");
     renderRecentDetections();
   });
 }
