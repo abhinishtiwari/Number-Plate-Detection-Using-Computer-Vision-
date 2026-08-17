@@ -378,12 +378,6 @@ body {
   margin-bottom: 4px;
 }
 
-.stat-val-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .stat-value {
   font-size: 1.4rem;
   font-weight: 800;
@@ -871,5 +865,255 @@ body {
   
   .main-content {
     padding: 14px;
+  }
+}
+
+/* ==========================================================================
+   Additions for the reworked dashboard
+   ========================================================================== */
+
+/* Status banner variants. The old markup passed a `type` that had no styles,
+   so errors looked identical to progress messages. */
+.status-banner.status-info {
+  border-left: 3px solid var(--accent-cyan);
+}
+
+.status-banner.status-success {
+  border-left: 3px solid var(--accent-green);
+}
+
+.status-banner.status-error {
+  border-left: 3px solid #f87171;
+  color: #fca5a5;
+}
+
+/* Pipeline / engine status line */
+.engine-status {
+  font-size: 0.78rem;
+  line-height: 1.4;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background-color: var(--card-bg);
+  border: 1px solid var(--card-border);
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+
+.engine-status.engine-good { border-left: 3px solid var(--accent-green); }
+.engine-status.engine-warn { border-left: 3px solid #fbbf24; }
+.engine-status.engine-bad  { border-left: 3px solid #f87171; color: #fca5a5; }
+
+/* Result badges */
+.badge-warn,
+.badge-error {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.badge-warn {
+  background-color: rgba(251, 191, 36, 0.18);
+  color: #fbbf24;
+}
+
+.badge-error {
+  background-color: rgba(248, 113, 113, 0.18);
+  color: #fca5a5;
+}
+
+/* Results list */
+.result-cards-container {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: 520px;
+  overflow-y: auto;
+}
+
+.result-placeholder {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  padding: 18px 0;
+}
+
+.result-details.stacked {
+  border-top: 1px solid var(--card-border);
+  padding-top: 14px;
+}
+
+.detail-note {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.muted {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.recent-badge-img.muted {
+  opacity: 0.55;
+}
+
+/* Small inline tags used for "unverified format" / "n char fix" */
+.tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 0.66rem;
+  font-weight: 600;
+  background-color: rgba(148, 163, 184, 0.18);
+  color: var(--text-secondary);
+  vertical-align: middle;
+}
+
+.tag-warn {
+  background-color: rgba(251, 191, 36, 0.18);
+  color: #fbbf24;
+}
+
+/* Button that looks like a link (video seek, clear history) */
+.link-btn,
+button.link-sm {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  color: var(--accent-cyan);
+  text-align: left;
+}
+
+.link-btn {
+  font-size: 0.75rem;
+  text-decoration: underline;
+}
+
+.link-btn:hover,
+button.link-sm:hover {
+  filter: brightness(1.2);
+}
+
+.table-empty {
+  padding: 16px 12px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+/* Focus visibility for keyboard users */
+:focus-visible {
+  outline: 2px solid var(--accent-cyan);
+  outline-offset: 2px;
+}
+
+/* --------------------------------------------------------------------------
+   Responsive fixes
+   -------------------------------------------------------------------------- */
+
+/* The stats grid only ever holds three cards, so four columns left a gap. */
+.stats-grid {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+/* Long city names used to overflow the card because only overflow-y was set. */
+.table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.rto-table {
+  min-width: 420px;
+}
+
+@media (max-width: 1200px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 1024px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Tablets and phones: the sidebar becomes a horizontal strip so the
+   navigation stays reachable instead of eating a column of screen space. */
+@media (max-width: 768px) {
+  .app-layout {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    overflow-x: auto;
+    padding: 10px 12px;
+    border-right: none;
+    border-bottom: 1px solid var(--card-border);
+  }
+
+  .nav-menu {
+    flex-direction: row;
+    gap: 8px;
+  }
+
+  .sidebar .nav-item {
+    white-space: nowrap;
+    justify-content: center;
+  }
+
+  .sidebar .nav-item .nav-text {
+    display: none;
+  }
+
+  .sidebar-card {
+    display: none;
+  }
+
+  .result-cards-container {
+    max-height: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .top-nav {
+    padding: 0 14px;
+  }
+
+  .brand-subtitle {
+    display: none;
+  }
+
+  .main-content {
+    padding: 14px;
+  }
+
+  .card {
+    padding: 14px;
+  }
+
+  .card-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .detail-row {
+    flex-wrap: wrap;
+    gap: 4px;
   }
 }

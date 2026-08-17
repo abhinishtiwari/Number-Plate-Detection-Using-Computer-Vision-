@@ -1,8 +1,29 @@
-fastapi>=0.100.0
-uvicorn>=0.22.0
-python-multipart>=0.0.6
-opencv-python-headless>=4.8.0.74
-numpy>=1.24.0
-pillow>=9.5.0
-pytesseract>=0.3.10
-easyocr>=1.7.0
+# Pinned so builds are reproducible and to avoid surprise breaking changes.
+
+# --- API ---
+fastapi==0.121.2
+uvicorn[standard]==0.41.0
+python-multipart==0.0.20
+
+# --- Computer vision ---
+# opencv-contrib-python (not opencv-python) because the Haar cascade proposal
+# stage needs cv2.CascadeClassifier. Installing both distributions clobbers the
+# cv2 package, so pick exactly one.
+opencv-contrib-python==5.0.0.93
+numpy==2.5.2
+pillow==12.1.0
+
+# --- OCR ---
+# RapidOCR runs PP-OCR models on ONNX Runtime: CPU only, offline after install,
+# no torch. This is the engine that actually reads plates.
+rapidocr-onnxruntime==1.2.3
+onnxruntime==1.28.0
+
+# --- Optional OCR engines ---
+# Uncomment either one to add it to the fallback chain. Neither is required.
+# easyocr==1.7.2          # also needs a working torch build
+# pytesseract==0.3.13     # also needs the system `tesseract` binary
+
+# --- Optional detector ---
+# Only needed if you train YOLO weights; see backend/dataset/data.yaml.
+# ultralytics==8.3.0

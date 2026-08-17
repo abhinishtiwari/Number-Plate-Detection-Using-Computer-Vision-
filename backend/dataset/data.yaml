@@ -1,12 +1,45 @@
-# YOLOv8 Training Dataset Configuration for Number Plate Detection
-path: ./dataset  # Dataset root dir
-train: images/train  # Train images relative to 'path'
-val: images/val      # Val images relative to 'path'
-test: images/test    # Test images relative to 'path' (optional)
+# YOLO training config for number plate detection.
+#
+# This is a TRAINING config only. It is unrelated to the RTO lookup CSV at the
+# repository root, which is a reference table and must never be used as
+# training data.
+#
+# Detection works without YOLO (see backend/detector.py). Train weights only if
+# you want a learned detector.
+#
+# Expected layout, relative to this file:
+#
+#   backend/dataset/
+#   ├── data.yaml
+#   ├── images/
+#   │   ├── train/   frame_0001.jpg ...
+#   │   ├── val/
+#   │   └── test/    (optional)
+#   └── labels/
+#       ├── train/   frame_0001.txt ...
+#       ├── val/
+#       └── test/    (optional)
+#
+# Each label file holds one line per plate, normalised to the image size:
+#
+#   <class_id> <x_center> <y_center> <width> <height>
+#   0 0.512 0.664 0.431 0.194
+#
+# There is a single class, so class_id is always 0. A frame with no plate gets
+# an empty .txt file (not a missing one).
+#
+# Train:
+#   pip install ultralytics
+#   yolo task=detect mode=train model=yolov8n.pt data=backend/dataset/data.yaml epochs=50 imgsz=640
+#
+# Then copy runs/detect/train/weights/best.pt to backend/models/plate_yolo.pt
+# (or set YOLO_WEIGHTS_PATH). /health will list "yolo" in detection_sources.
 
-# Number of classes
+path: .          # dataset root, relative to this file
+train: images/train
+val: images/val
+test: images/test
+
 nc: 1
-
-# Class names
 names:
   0: number_plate

@@ -9,12 +9,21 @@ venv/
 ENV/
 env/
 
-# Output & Logs
+# Output & logs
 output/
-*.csv
 *.log
 
-# IDEs and Editors
+# Detection CSV logs written by the CLI (--csv).
+# NOTE: a blanket "*.csv" rule used to hide India_RTO_Registration_Dataset_New.csv,
+# so a fresh clone had no RTO dataset and every lookup returned "Unknown".
+# Keep CSV ignores scoped to generated output only.
+output/*.csv
+detections.csv
+
+# Trained model weights (large; train locally with backend/dataset/data.yaml)
+backend/models/*.pt
+
+# IDEs and editors
 .vscode/
 .idea/
 *.swp

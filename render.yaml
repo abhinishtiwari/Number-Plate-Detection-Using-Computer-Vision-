@@ -1,0 +1,46 @@
+# Render blueprint - API only.
+#
+# The dashboard is hosted separately on GitHub Pages, so SERVE_FRONTEND is off
+# and this service exposes just /health, /rto-dataset, /detect and /docs.
+#
+# Deploy: Render Dashboard -> New -> Blueprint -> pick this repository.
+# Render reads this file and creates the service. After the first deploy, set
+# CORS_ALLOWED_ORIGINS to your GitHub Pages origin (see README).
+services:
+  - type: web
+    name: number-plate-ai-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    # Build from the repository root so the RTO dataset CSV is in the image.
+    dockerContext: .
+    plan: free
+    region: singapore        # closest to India; change if you prefer
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # API-only: "/" returns service metadata instead of the dashboard.
+      - key: SERVE_FRONTEND
+        value: "0"
+
+      # Browser origins allowed to call this API. Replace with your GitHub Pages
+      # origin, which is the scheme + host only, no repository path:
+      #   https://<your-github-username>.github.io
+      # Leave as * only while testing; credentials stay disabled for "*".
+      - key: CORS_ALLOWED_ORIGINS
+        value: "*"
+
+      # The free plan has 512 MB RAM. ONNX Runtime allocates a thread pool per
+      # core, so pin it to one thread to keep the footprint down.
+      - key: OMP_NUM_THREADS
+        value: "1"
+      - key: ONNXRUNTIME_NUM_THREADS
+        value: "1"
+
+      # Videos are the memory-heavy path. Sample fewer frames on the free plan.
+      - key: VIDEO_FRAME_STRIDE
+        value: "15"
+      - key: VIDEO_MAX_FRAMES_SCANNED
+        value: "150"
+
+      - key: LOG_LEVEL
+        value: "INFO"
