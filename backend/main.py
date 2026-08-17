@@ -13,7 +13,9 @@ import gc
 import logging
 import os
 import tempfile
+import time
 from contextlib import asynccontextmanager
+from io import BytesIO
 from pathlib import Path
 
 import cv2
@@ -21,6 +23,7 @@ import numpy as np
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from PIL import Image, UnidentifiedImageError
 
 from .config import (
     ALLOWED_IMAGE_SUFFIXES,
@@ -28,10 +31,13 @@ from .config import (
     CORS_ALLOWED_ORIGINS,
     FRONTEND_DIR,
     LOG_LEVEL,
+    MAX_IMAGE_PIXELS,
     MAX_OCR_CANDIDATES,
     MAX_OCR_CORRECTIONS,
     MAX_UPLOAD_BYTES,
+    OCR_MIN_CONFIDENCE,
     ONLY_VALID_PLATES,
+    PROCESSING_TIMEOUT_SECONDS,
     REQUIRE_KNOWN_RTO,
     ROI_PAD_RATIO,
     SERVE_FRONTEND,
@@ -39,8 +45,8 @@ from .config import (
     VIDEO_MAX_FRAMES_SCANNED,
 )
 from .detector import PlateCandidate, PlateDetector
-from .ocr_engine import ocr_engine
-from .plate_text import PlateReading
+from .ocr_engine import PlateResult, ocr_engine
+from .plate_text import PlateReading, parse
 from .rto_lookup import rto_engine
 
 logging.basicConfig(
@@ -56,7 +62,8 @@ detector = PlateDetector(ocr=ocr_engine)
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    """Report the real capabilities of this install before serving traffic."""
+    """Initialise constrained native libraries and report capabilities."""
+    cv2.setNumThreads(1)
     status = ocr_engine.status()
     logger.info("OCR engines available: %s", status["available"] or "none")
     if not status["neural_engine_available"]:
@@ -119,22 +126,32 @@ def get_rto_dataset() -> dict:
 
 
 @app.post("/detect")
-async def detect_plate(file: UploadFile = File(...)) -> dict:
-    """Detect and read number plates in an uploaded image or video."""
-    contents = await file.read()
+def detect_plate(file: UploadFile = File(...)) -> dict:
+    """Detect plates without blocking the ASGI event loop.
+
+    FastAPI runs this synchronous endpoint in its thread pool, so health checks
+    and Gunicorn heartbeats remain responsive while OpenCV/ONNX does CPU work.
+    The bounded read prevents an oversized request from becoming a second large
+    in-memory copy.
+    """
+    suffix = Path(file.filename or "").suffix.lower()
+    content_type = (file.content_type or "").lower()
+    is_video = content_type.startswith("video/") or suffix in ALLOWED_VIDEO_SUFFIXES
+    is_image = content_type.startswith("image/") or suffix in ALLOWED_IMAGE_SUFFIXES
+
+    try:
+        contents = file.file.read(MAX_UPLOAD_BYTES + 1)
+    finally:
+        file.file.close()
+
     if not contents:
         raise HTTPException(status_code=400, detail="Uploaded file is empty.")
     if len(contents) > MAX_UPLOAD_BYTES:
         limit_mb = MAX_UPLOAD_BYTES / (1024 * 1024)
         raise HTTPException(
             status_code=413,
-            detail=f"File is {len(contents) / (1024 * 1024):.1f} MB; the limit is {limit_mb:.0f} MB.",
+            detail=f"Upload exceeds the {limit_mb:.0f} MB limit.",
         )
-
-    suffix = Path(file.filename or "").suffix.lower()
-    content_type = (file.content_type or "").lower()
-    is_video = content_type.startswith("video/") or suffix in ALLOWED_VIDEO_SUFFIXES
-    is_image = content_type.startswith("image/") or suffix in ALLOWED_IMAGE_SUFFIXES
 
     if is_video:
         return _process_video(contents, suffix or ".mp4")
@@ -146,21 +163,34 @@ async def detect_plate(file: UploadFile = File(...)) -> dict:
                    f"({', '.join(sorted(ALLOWED_VIDEO_SUFFIXES))}).",
         )
 
+    try:
+        with Image.open(BytesIO(contents)) as probe:
+            width, height = probe.size
+    except (UnidentifiedImageError, OSError, ValueError):
+        raise HTTPException(status_code=400, detail="Invalid or corrupt image file.") from None
+
+    if width <= 0 or height <= 0 or width * height > MAX_IMAGE_PIXELS:
+        max_megapixels = MAX_IMAGE_PIXELS / 1_000_000
+        raise HTTPException(
+            status_code=413,
+            detail=f"Decoded image is too large; maximum is {max_megapixels:g} megapixels.",
+        )
+
     image = cv2.imdecode(np.frombuffer(contents, np.uint8), cv2.IMREAD_COLOR)
     if image is None:
         raise HTTPException(status_code=400, detail="Invalid or corrupt image file.")
 
-    plates = process_frame(image)
-    result = {
-        "media_type": "image",
-        "image_size": {"width": int(image.shape[1]), "height": int(image.shape[0])},
-        "plates": plates,
-        "plate_count": len(plates),
-    }
-    # Free large arrays promptly — critical on memory-constrained hosting.
-    del image, contents
-    gc.collect()
-    return result
+    try:
+        plates = process_frame(image)
+        return {
+            "media_type": "image",
+            "image_size": {"width": int(image.shape[1]), "height": int(image.shape[0])},
+            "plates": plates,
+            "plate_count": len(plates),
+        }
+    finally:
+        del image, contents
+        gc.collect()
 
 
 # ------------------------------------------------------------------- pipeline
@@ -176,13 +206,19 @@ def process_frame(image: np.ndarray) -> list[dict]:
     results: list[dict] = []
 
     for candidate in _rank_candidates(detector.detect(image)):
-        roi = _crop(image, candidate)
-        if roi.size == 0:
-            continue
-
-        result = ocr_engine.read_plate(roi)
-        result = _prefer_better_reading(result, candidate)
-        rto = rto_engine.lookup(result.reading if result.text else None)
+        # A valid, confident full-frame OCR result already came from this exact
+        # region. Re-running OCR over several crop variants is duplicate work
+        # and was the largest source of request time and native allocations.
+        trusted = _trusted_text_hint(candidate)
+        if trusted is not None:
+            result, rto = trusted
+        else:
+            roi = _crop(image, candidate)
+            if roi.size == 0:
+                continue
+            result = ocr_engine.read_plate(roi)
+            result = _prefer_better_reading(result, candidate)
+            rto = rto_engine.lookup(result.reading if result.text else None)
 
         if ONLY_VALID_PLATES:
             rejection = _rejection_reason(result.reading, rto)
@@ -197,6 +233,26 @@ def process_frame(image: np.ndarray) -> list[dict]:
     # Readable plates first, then higher confidence.
     results.sort(key=lambda p: (p["is_valid_format"], p["confidence"] or 0.0), reverse=True)
     return results
+
+
+def _trusted_text_hint(candidate: PlateCandidate) -> tuple[PlateResult, dict] | None:
+    """Reuse a strong full-frame OCR reading instead of invoking OCR again."""
+    confidence = candidate.text_hint_confidence or 0.0
+    if not candidate.text_hint or confidence < OCR_MIN_CONFIDENCE:
+        return None
+
+    reading = parse(candidate.text_hint)
+    rto = rto_engine.lookup(reading if reading.text else None)
+    if _rejection_reason(reading, rto) is not None:
+        return None
+
+    result = PlateResult(
+        reading=reading,
+        confidence=round(confidence * 100.0, 1),
+        engine="rapidocr:text-box",
+        fragments=[candidate.text_hint],
+    )
+    return result, rto
 
 
 def _rejection_reason(reading: PlateReading, rto: dict) -> str | None:
@@ -359,13 +415,18 @@ def _build_plate_payload(candidate: PlateCandidate, reading: PlateReading,
 
 
 def _process_video(contents: bytes, suffix: str) -> dict:
-    """Sample frames from a video and report where each plate was seen."""
+    """Sample a bounded number of frames within the request time budget."""
     tmp_path = None
+    capture = None
+    deadline = time.monotonic() + PROCESSING_TIMEOUT_SECONDS
+    timed_out = False
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
             tmp.write(contents)
             tmp_path = tmp.name
 
+        # Drop the upload copy before native video decoding starts.
+        del contents
         capture = cv2.VideoCapture(tmp_path)
         if not capture.isOpened():
             raise HTTPException(status_code=400,
@@ -378,33 +439,37 @@ def _process_video(contents: bytes, suffix: str) -> dict:
         scanned = 0
 
         while scanned < VIDEO_MAX_FRAMES_SCANNED:
+            if time.monotonic() >= deadline:
+                timed_out = True
+                break
+
+            # Seek directly to sampled frames instead of decoding every frame in
+            # between. This keeps free-tier video requests bounded.
+            capture.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
             ok, frame = capture.read()
             if not ok:
                 break
-            if frame_index % VIDEO_FRAME_STRIDE == 0:
-                scanned += 1
-                for plate in process_frame(frame):
-                    # Frame provenance so the UI can show *where* it was seen.
-                    plate["frame_index"] = frame_index
-                    plate["timestamp_seconds"] = round(frame_index / fps, 2) if fps > 0 else None
-                    key = plate["text"]
-                    if not key:
-                        if len(unreadable) < 20:
-                            unreadable.append(plate)
-                        continue
-                    previous = best_by_plate.get(key)
-                    if previous is None:
-                        plate["times_seen"] = 1
-                        best_by_plate[key] = plate
-                    else:
-                        previous["times_seen"] += 1
-                        # Keep the highest-confidence sighting of this plate.
-                        if (plate["confidence"] or 0) > (previous["confidence"] or 0):
-                            plate["times_seen"] = previous["times_seen"]
-                            best_by_plate[key] = plate
-            frame_index += 1
 
-        capture.release()
+            scanned += 1
+            for plate in process_frame(frame):
+                plate["frame_index"] = frame_index
+                plate["timestamp_seconds"] = round(frame_index / fps, 2) if fps > 0 else None
+                key = plate["text"]
+                if not key:
+                    if len(unreadable) < 5:
+                        unreadable.append(plate)
+                    continue
+                previous = best_by_plate.get(key)
+                if previous is None:
+                    plate["times_seen"] = 1
+                    best_by_plate[key] = plate
+                else:
+                    previous["times_seen"] += 1
+                    if (plate["confidence"] or 0) > (previous["confidence"] or 0):
+                        plate["times_seen"] = previous["times_seen"]
+                        best_by_plate[key] = plate
+            del frame
+            frame_index += VIDEO_FRAME_STRIDE
 
         plates = sorted(best_by_plate.values(),
                         key=lambda p: (p["is_valid_format"], p["confidence"] or 0.0),
@@ -412,17 +477,19 @@ def _process_video(contents: bytes, suffix: str) -> dict:
         if not plates:
             plates = unreadable[:5]
 
-        result = {
+        return {
             "media_type": "video",
             "frames_scanned": scanned,
             "frame_stride": VIDEO_FRAME_STRIDE,
+            "processing_limited": timed_out or scanned >= VIDEO_MAX_FRAMES_SCANNED,
             "fps": round(fps, 2) if fps > 0 else None,
             "plates": plates,
             "plate_count": len(plates),
         }
-        gc.collect()
-        return result
     finally:
+        if capture is not None:
+            capture.release()
+        gc.collect()
         if tmp_path and os.path.exists(tmp_path):
             try:
                 os.remove(tmp_path)

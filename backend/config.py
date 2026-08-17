@@ -62,8 +62,13 @@ YOLO_WEIGHTS_PATH = Path(_env_str("YOLO_WEIGHTS_PATH", str(BACKEND_DIR / "models
 
 # ------------------------------------------------------------------- uploads
 
-#: Hard ceiling on upload size. Mirrored in the frontend copy text.
-MAX_UPLOAD_BYTES = _env_int("MAX_UPLOAD_BYTES", 10 * 1024 * 1024)
+#: Hard ceiling on upload size. The deployed free-tier service keeps this low
+#: because encoded size is not the same as decoded image memory.
+MAX_UPLOAD_BYTES = _env_int("MAX_UPLOAD_BYTES", 5 * 1024 * 1024)
+
+#: Reject compressed images that expand beyond this many pixels before OpenCV
+#: decodes them. Twelve megapixels is already well above the detector input size.
+MAX_IMAGE_PIXELS = _env_int("MAX_IMAGE_PIXELS", 12_000_000)
 
 ALLOWED_IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 ALLOWED_VIDEO_SUFFIXES = {".mp4", ".avi", ".mov", ".mkv", ".webm"}
@@ -72,7 +77,7 @@ ALLOWED_VIDEO_SUFFIXES = {".mp4", ".avi", ".mov", ".mkv", ".webm"}
 
 #: Images larger than this on the long edge are downscaled before detection and
 #: the resulting boxes are scaled back. Keeps thresholds resolution independent.
-DETECTION_MAX_EDGE = _env_int("DETECTION_MAX_EDGE", 1600)
+DETECTION_MAX_EDGE = _env_int("DETECTION_MAX_EDGE", 800)
 
 #: Plate geometry limits. Ratios are relative to image area/width so that the
 #: same numbers work for a 480p frame and a 12 MP phone photo.
@@ -91,7 +96,7 @@ ROI_PAD_RATIO = _env_float("ROI_PAD_RATIO", 0.06)
 #: Upper bound on regions sent to OCR per frame. The geometric detector proposes
 #: many boxes on chrome trim and reflections; without a cap every one costs an
 #: OCR pass. Candidates are ranked before the cap is applied.
-MAX_OCR_CANDIDATES = _env_int("MAX_OCR_CANDIDATES", 12)
+MAX_OCR_CANDIDATES = _env_int("MAX_OCR_CANDIDATES", 6)
 
 #: When true (the default) only readings that validate as a real Indian
 #: registration are returned. This is what keeps manufacturer badges ("FORD"),
@@ -130,8 +135,12 @@ TESSERACT_CANDIDATE_PATHS = (
 
 # --------------------------------------------------------------------- video
 
-VIDEO_FRAME_STRIDE = _env_int("VIDEO_FRAME_STRIDE", 8)
-VIDEO_MAX_FRAMES_SCANNED = _env_int("VIDEO_MAX_FRAMES_SCANNED", 900)
+VIDEO_FRAME_STRIDE = _env_int("VIDEO_FRAME_STRIDE", 30)
+VIDEO_MAX_FRAMES_SCANNED = _env_int("VIDEO_MAX_FRAMES_SCANNED", 12)
+
+#: Stop synchronous media work before the hosting proxy/worker timeout. This is
+#: checked between sampled video frames; images get the same frontend deadline.
+PROCESSING_TIMEOUT_SECONDS = _env_float("PROCESSING_TIMEOUT_SECONDS", 75.0)
 
 # ----------------------------------------------------------------------- API
 
@@ -140,9 +149,8 @@ CORS_ALLOWED_ORIGINS = tuple(
     o.strip() for o in _env_str("CORS_ALLOWED_ORIGINS", "*").split(",") if o.strip()
 )
 
-#: Serve the dashboard from this process. Turn off for an API-only deployment
-#: (for example the API on Render with the dashboard on GitHub Pages), which
-#: makes "/" return service metadata instead of the HTML bundle.
+#: Serve the dashboard from this process. This is enabled for the combined
+#: Render service so browser and API requests share one origin.
 SERVE_FRONTEND = _env_flag("SERVE_FRONTEND", True)
 
 LOG_LEVEL = _env_str("LOG_LEVEL", "INFO").upper()

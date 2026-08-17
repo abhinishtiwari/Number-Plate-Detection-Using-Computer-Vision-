@@ -14,10 +14,9 @@ const trimSlashes = (value) => String(value).trim().replace(/\/+$/, "");
 /**
  * Resolve the API base URL, in priority order:
  *  1. `?api=` query string, for testing another backend without a redeploy.
- *  2. `window.NUMBER_PLATE_API_URL` from config.js, which is how a static host
- *     such as GitHub Pages points at a Render service.
+ *  2. `window.NUMBER_PLATE_API_URL` from config.js, for an optional override.
  *  3. Local development defaults.
- *  4. Same origin, which is the case when FastAPI serves this bundle itself.
+ *  4. Same origin, used by the combined Render service.
  */
 const API_SOURCE = { url: "", from: "" };
 
@@ -58,7 +57,8 @@ const COLD_START_DELAY_MS = 5000;
 const HISTORY_KEY = "anpr_history_v6";
 const THEME_KEY = "anpr_theme";
 const HISTORY_LIMIT = 200;
-const DEFAULT_MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+const DEFAULT_MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+const DETECTION_TIMEOUT_MS = 90_000;
 
 /* --------------------------------------------------------------- elements */
 
@@ -394,11 +394,31 @@ detectBtn.addEventListener("click", async () => {
     const formData = new FormData();
     formData.append("file", selectedFile);
 
-    const response = await fetch(`${API_URL}/detect`, { method: "POST", body: formData });
-    const payload = await response.json().catch(() => null);
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), DETECTION_TIMEOUT_MS);
+    let response;
+    try {
+      response = await fetch(`${API_URL}/detect`, {
+        method: "POST",
+        body: formData,
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (error.name === "AbortError") {
+        throw new Error("Detection exceeded 90 seconds. Try a smaller image or shorter video.");
+      }
+      throw error;
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
 
+    const payload = await response.json().catch(() => null);
     if (!response.ok) {
-      // FastAPI puts the reason in `detail`; surface it instead of a generic message.
+      if (response.status === 502 || response.status === 503) {
+        throw new Error(
+          "The detection worker restarted or is still waking up. Wait 30 seconds, then try a smaller file.",
+        );
+      }
       throw new Error(payload?.detail || `Request failed with HTTP ${response.status}`);
     }
     if (token !== renderToken) return; // a newer file was selected mid-request

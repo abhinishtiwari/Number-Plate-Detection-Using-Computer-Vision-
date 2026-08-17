@@ -26,12 +26,18 @@ services:
         value: "800"
       - key: MAX_OCR_CANDIDATES
         value: "6"
+      - key: OCR_ENGINE_ORDER
+        value: "rapidocr"
       - key: VIDEO_FRAME_STRIDE
         value: "30"
       - key: VIDEO_MAX_FRAMES_SCANNED
-        value: "60"
+        value: "12"
+      - key: PROCESSING_TIMEOUT_SECONDS
+        value: "75"
       - key: MAX_UPLOAD_BYTES
         value: "5242880"
+      - key: MAX_IMAGE_PIXELS
+        value: "12000000"
       - key: PYTHON_VERSION
         value: "3.12.3"
       - key: MALLOC_ARENA_MAX

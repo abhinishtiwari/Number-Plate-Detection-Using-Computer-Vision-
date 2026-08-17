@@ -24,7 +24,7 @@ Plate localisation ─────── YOLO weights (optional)
 Crop + pad
         │
         ▼
-OpenCV preprocessing ───── grayscale → upscale → CLAHE → sharpen
+OpenCV preprocessing ───── grayscale → upscale → CLAHE
         │
         ▼
 Local OCR ──────────────── RapidOCR → EasyOCR → Tesseract → template matcher
@@ -93,7 +93,7 @@ python main.py --image car.jpg --json
 ### Tests
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 python -m pytest tests -q
 ```
 
@@ -218,107 +218,51 @@ in `detection_sources`.
 
 ## Configuration
 
-All settings are environment variables with sensible defaults; see
-`backend/config.py`.
+All settings are environment variables; see `backend/config.py`.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `RTO_DATASET_PATH` | repo root CSV | RTO dataset location |
-| `OCR_ENGINE_ORDER` | `rapidocr,easyocr,tesseract,template` | Engine preference |
+| `OCR_ENGINE_ORDER` | `rapidocr,easyocr,tesseract,template` | Engine preference; Render uses only `rapidocr` |
 | `OCR_MIN_CONFIDENCE` | `0.30` | Minimum accepted OCR word score |
-| `ONLY_VALID_PLATES` | `1` | Return only real registrations. `0` shows every candidate region (debugging) |
-| `REQUIRE_KNOWN_RTO` | `1` | Require the state+RTO prefix to exist in the dataset |
-| `MAX_OCR_CORRECTIONS` | `2` | Reject readings needing more character repairs than this |
-| `MAX_OCR_CANDIDATES` | `12` | Cap on regions sent to OCR per frame |
-| `MAX_UPLOAD_BYTES` | `10485760` | Upload ceiling (10 MB) |
-| `DETECTION_MAX_EDGE` | `1600` | Long edge used for detection; boxes are scaled back |
-| `VIDEO_FRAME_STRIDE` | `8` | Process every Nth frame |
-| `VIDEO_MAX_FRAMES_SCANNED` | `900` | Cap on sampled frames |
-| `CORS_ALLOWED_ORIGINS` | `*` | Comma-separated origins; credentials are only enabled for an explicit list |
+| `ONLY_VALID_PLATES` | `1` | Return only valid registrations |
+| `REQUIRE_KNOWN_RTO` | `1` | Require a known state+RTO prefix |
+| `MAX_OCR_CORRECTIONS` | `2` | Maximum ambiguous-character repairs |
+| `MAX_OCR_CANDIDATES` | `6` | Maximum crop OCR passes per frame |
+| `MAX_UPLOAD_BYTES` | `5242880` | Upload ceiling (5 MB) |
+| `MAX_IMAGE_PIXELS` | `12000000` | Decoded-image safety ceiling |
+| `DETECTION_MAX_EDGE` | `800` | Detector/OCR long edge; boxes are scaled back |
+| `VIDEO_FRAME_STRIDE` | `30` | Distance between sampled frames |
+| `VIDEO_MAX_FRAMES_SCANNED` | `12` | Sampled-frame cap per request |
+| `PROCESSING_TIMEOUT_SECONDS` | `75` | Video processing time budget |
+| `CORS_ALLOWED_ORIGINS` | `*` | Comma-separated browser origins |
 | `YOLO_WEIGHTS_PATH` | `backend/models/plate_yolo.pt` | Optional weights |
 | `LOG_LEVEL` | `INFO` | Logging level |
 
 ---
 
-## Docker
+## Deploying one service on Render
 
-Build from the repository root so the dataset is included:
+The frontend and API are deployed together from this repository. FastAPI serves
+`frontend/` and the browser calls `/health`, `/rto-dataset`, and `/detect` on the
+same origin. No GitHub Pages workflow, frontend service, Dockerfile, or API URL
+configuration is required.
 
-```bash
-docker build -f backend/Dockerfile -t number-plate-ai .
-docker run -p 8000:8000 number-plate-ai
-```
+1. In Render, create or apply the Blueprint from `render.yaml`.
+2. Ensure the service tracks the repository's `main` branch.
+3. Confirm the deployed commit in the Render deploy log.
+4. Open the service URL and verify `/health` before uploading a file.
 
-The build fails fast if the dataset or OCR engine is missing.
+The Blueprint uses one worker, one native math thread, an 800 px inference edge,
+a 5 MB upload limit, a 12 MP decoded-image limit, and bounded video sampling for
+the free tier. The first request after inactivity can still take time while the
+service wakes and initializes RapidOCR.
 
----
+If the dashboard still says `max 10 MB`, Render is serving an old commit. Deploy
+the latest `main` commit manually and clear the browser cache.
 
-## Deploying: API on Render, dashboard on GitHub Pages
-
-GitHub Pages serves static files only, so the dashboard has to call the API on
-another host. Two pieces:
-
-| Piece | Host | What it is |
-| --- | --- | --- |
-| `backend/` | Render (Docker web service) | API only: `/health`, `/rto-dataset`, `/detect`, `/docs` |
-| `frontend/` | GitHub Pages | Static dashboard that calls the Render URL |
-
-### 1. Backend on Render
-
-`render.yaml` is a blueprint that creates the service with the right settings.
-In the Render dashboard: **New → Blueprint → select this repository → Apply**.
-It builds `backend/Dockerfile` with the repository root as the build context, so
-the RTO CSV ends up in the image.
-
-The blueprint sets `SERVE_FRONTEND=0`, so `/` returns service metadata rather
-than the dashboard. Copy the service URL, for example
-`https://number-plate-ai-api.onrender.com`, and confirm `/health` responds.
-
-### 2. Point the dashboard at it
-
-Edit `frontend/config.js`:
-
-```js
-window.NUMBER_PLATE_API_URL = "https://number-plate-ai-api.onrender.com";
-```
-
-Commit and push. `.github/workflows/deploy-frontend.yml` publishes `frontend/`
-to Pages; enable it once under **Settings → Pages → Source: GitHub Actions**.
-The workflow refuses to deploy while that value is empty, because the dashboard
-would otherwise try to call `github.io` as its own API.
-
-For a quick test against a different backend, no redeploy needed:
-`https://<user>.github.io/<repo>/?api=https://other-service.onrender.com`
-
-### 3. Lock CORS to your Pages origin
-
-On Render, set `CORS_ALLOWED_ORIGINS` to the scheme and host only — no
-repository path, no trailing slash:
-
-```
-CORS_ALLOWED_ORIGINS = https://<your-github-username>.github.io
-```
-
-An explicit origin also enables credentialed requests, which a `*` wildcard
-cannot do.
-
-### Free plan behaviour
-
-A free Render instance sleeps after ~15 minutes idle, and the next request has
-to boot the container and load the OCR models. The dashboard handles this: it
-retries `/health` for about a minute at page load and shows "Waking up the
-backend…" instead of reporting a failure.
-
-The free plan also caps memory at 512 MB. The blueprint pins ONNX Runtime to one
-thread and reduces video frame sampling to stay inside it. Long videos are the
-most likely thing to exhaust memory or hit the request timeout; images are
-comfortable.
-
-### Before you share the URL publicly
-
-`/detect` has no authentication and no rate limit. Anyone with the URL can spend
-your compute on uploads. For anything beyond a demo, add an API key check and a
-rate limit, and keep `CORS_ALLOWED_ORIGINS` set to your own origin.
+`/detect` has no authentication or rate limit. Add both before using this as a
+public production service.
 
 ---
 
@@ -335,12 +279,12 @@ rate limit, and keep `CORS_ALLOWED_ORIGINS` set to your own origin.
 │   ├── main.py            # FastAPI app, also serves the dashboard
 │   ├── cascades/          # Haar cascade
 │   ├── dataset/data.yaml  # YOLO training config
-│   ├── requirements.txt
-│   └── Dockerfile
+│   └── requirements.txt
 ├── frontend/              # dashboard (HTML/CSS/JS, no build step)
 ├── tests/                 # pytest suite
 ├── main.py                # CLI over the same backend package
-└── requirements.txt       # backend requirements + test tooling
+├── requirements.txt       # production dependencies
+└── requirements-dev.txt   # production + test dependencies
 ```
 
 ---
