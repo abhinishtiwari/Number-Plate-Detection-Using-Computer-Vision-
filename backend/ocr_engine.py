@@ -368,9 +368,9 @@ class OCREngine:
 
         clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
         equalised = clahe.apply(gray)
-        sharpened = cv2.filter2D(equalised, -1, np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]]))
 
-        variants = [gray, equalised, sharpened]
+        # Keep variant count low to save memory on constrained hosts.
+        variants = [gray, equalised]
         if roi.ndim == 3:
             variants.insert(0, roi)  # neural engines do better on the colour crop
         return variants

@@ -243,7 +243,7 @@ class PlateDetector:
         candidates = []
         for source in (edges, closed):
             contours, _ = cv2.findContours(source, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-            contours = sorted(contours, key=cv2.contourArea, reverse=True)[:80]
+            contours = sorted(contours, key=cv2.contourArea, reverse=True)[:40]
             for contour in contours:
                 x, y, w, h = cv2.boundingRect(contour)
                 if not self._plausible(w, h, image_area):

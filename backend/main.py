@@ -9,6 +9,7 @@ frontend can say "not in dataset" instead of showing an invented city.
 """
 from __future__ import annotations
 
+import gc
 import logging
 import os
 import tempfile
@@ -150,12 +151,16 @@ async def detect_plate(file: UploadFile = File(...)) -> dict:
         raise HTTPException(status_code=400, detail="Invalid or corrupt image file.")
 
     plates = process_frame(image)
-    return {
+    result = {
         "media_type": "image",
         "image_size": {"width": int(image.shape[1]), "height": int(image.shape[0])},
         "plates": plates,
         "plate_count": len(plates),
     }
+    # Free large arrays promptly — critical on memory-constrained hosting.
+    del image, contents
+    gc.collect()
+    return result
 
 
 # ------------------------------------------------------------------- pipeline
@@ -407,7 +412,7 @@ def _process_video(contents: bytes, suffix: str) -> dict:
         if not plates:
             plates = unreadable[:5]
 
-        return {
+        result = {
             "media_type": "video",
             "frames_scanned": scanned,
             "frame_stride": VIDEO_FRAME_STRIDE,
@@ -415,6 +420,8 @@ def _process_video(contents: bytes, suffix: str) -> dict:
             "plates": plates,
             "plate_count": len(plates),
         }
+        gc.collect()
+        return result
     finally:
         if tmp_path and os.path.exists(tmp_path):
             try:

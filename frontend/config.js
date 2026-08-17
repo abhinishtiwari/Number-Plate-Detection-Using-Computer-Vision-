@@ -1,17 +1,11 @@
 /**
  * Frontend configuration.
  *
- * Set this to your Render service URL when the dashboard is hosted separately
- * (GitHub Pages) from the API (Render). Include the scheme, no trailing slash:
+ * When this dashboard is served by the same FastAPI process (the default on
+ * Render), leave NUMBER_PLATE_API_URL empty — the browser will use the same
+ * origin automatically.
  *
- *   window.NUMBER_PLATE_API_URL = "https://number-plate-ai.onrender.com";
- *
- * Leave it empty for local development. The dashboard then talks to
- * http://127.0.0.1:8000, which is where `uvicorn backend.main:app` listens.
- *
- * You can also override it per visit with a query string, which is handy for
- * testing a second backend without editing this file:
- *
- *   https://<user>.github.io/<repo>/?api=https://other-service.onrender.com
+ * Override per visit with a query string for testing a different backend:
+ *   https://your-app.onrender.com/?api=http://localhost:8000
  */
 window.NUMBER_PLATE_API_URL = "";
