@@ -18,14 +18,11 @@ services:
     healthCheckPath: /health
     autoDeploy: true
     envVars:
-      # API-only: "/" returns service metadata instead of the dashboard.
+      # Serve the dashboard from the same service (no separate static host needed).
       - key: SERVE_FRONTEND
-        value: "0"
+        value: "1"
 
-      # Browser origins allowed to call this API. Replace with your GitHub Pages
-      # origin, which is the scheme + host only, no repository path:
-      #   https://<your-github-username>.github.io
-      # Leave as * only while testing; credentials stay disabled for "*".
+      # Same origin, so CORS is not needed. "*" keeps it open for local testing too.
       - key: CORS_ALLOWED_ORIGINS
         value: "*"
 
