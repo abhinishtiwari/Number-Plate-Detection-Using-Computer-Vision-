@@ -1,8 +1,6 @@
-# Runtime dependencies live in backend/requirements.txt; this file adds the
-# tooling needed to run the test suite.
-#
-#   pip install -r requirements.txt
+# All runtime dependencies (Render installs from this file)
 -r backend/requirements.txt
 
+# Test tooling (not needed on Render but harmless)
 pytest==9.0.1
 httpx==0.28.1
