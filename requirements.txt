@@ -1,2 +1,2 @@
-# All runtime dependencies (Render installs from this file)
+# Local runtime dependencies
 -r backend/requirements.txt

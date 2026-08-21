@@ -8,9 +8,10 @@ implementation in src/ whose OCR fallback returned the literal string
 
 Examples
 --------
-    python main.py --image samples/car.jpg --output output/car.jpg
+    python main.py
+    python main.py --image samples/demo_plate.jpg --output output/demo_plate.jpg
     python main.py --video clip.mp4 --csv output/detections.csv
-    python main.py --image car.jpg --json
+    python main.py --image samples/demo_plate.jpg --json
 """
 from __future__ import annotations
 
@@ -24,10 +25,17 @@ from pathlib import Path
 
 import cv2
 
-from backend.main import process_frame
+from backend import __version__
 from backend.config import VIDEO_FRAME_STRIDE
 
 logger = logging.getLogger("cli")
+
+
+def process_frame(image):
+    """Load the shared pipeline lazily so CLI imports do not mount the web app."""
+    from backend.main import process_frame as shared_process_frame
+
+    return shared_process_frame(image)
 
 
 def annotate(image, plates):
@@ -108,8 +116,10 @@ def run_image(args) -> int:
     if args.output:
         out = Path(args.output)
         out.parent.mkdir(parents=True, exist_ok=True)
-        cv2.imwrite(str(out), annotate(image, plates))
-        print(f"Annotated image written to {out}")
+        if not cv2.imwrite(str(out), annotate(image, plates)):
+            print(f"error: could not write annotated image to {out}", file=sys.stderr)
+            return 1
+        print(f"Annotated image written to {out}", file=sys.stderr if args.json else sys.stdout)
     if args.csv:
         log_to_csv(Path(args.csv), plates, str(path))
     return 0
@@ -128,26 +138,35 @@ def run_video(args) -> int:
         fps = capture.get(cv2.CAP_PROP_FPS) or 25.0
         size = (int(capture.get(cv2.CAP_PROP_FRAME_WIDTH)),
                 int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT)))
+        if size[0] <= 0 or size[1] <= 0:
+            print("error: video reports invalid frame dimensions", file=sys.stderr)
+            capture.release()
+            return 2
         writer = cv2.VideoWriter(args.output, cv2.VideoWriter_fourcc(*"mp4v"), fps, size)
+        if not writer.isOpened():
+            print(f"error: could not create output video {args.output!r}", file=sys.stderr)
+            capture.release()
+            return 2
 
     seen: dict[str, dict] = {}
     frame_index = 0
-    latest: list[dict] = []
-    print("Processing video. Press 'q' in the preview window to stop.")
+    progress = sys.stderr if args.json else sys.stdout
+    print("Processing video. Press 'q' in the preview window to stop.", file=progress)
 
     try:
         while True:
             ok, frame = capture.read()
             if not ok:
                 break
+            frame_plates: list[dict] = []
             if frame_index % args.stride == 0:
-                latest = process_frame(frame)
-                for plate in latest:
+                frame_plates = process_frame(frame)
+                for plate in frame_plates:
                     if plate["text"] and plate["text"] not in seen:
                         seen[plate["text"]] = plate
-                        print(f"  frame {frame_index}: {describe(plate)}")
+                        print(f"  frame {frame_index}: {describe(plate)}", file=progress)
 
-            annotated = annotate(frame, latest)
+            annotated = annotate(frame, frame_plates)
             if writer:
                 writer.write(annotated)
             if args.show:
@@ -162,7 +181,7 @@ def run_video(args) -> int:
         if args.show:
             cv2.destroyAllWindows()
 
-    print(f"Done. {len(seen)} unique plate(s) across {frame_index} frame(s).")
+    print(f"Done. {len(seen)} unique plate(s) across {frame_index} frame(s).", file=progress)
     if args.json:
         print(json.dumps({"source": args.video, "plates": list(seen.values())}, indent=2))
     if args.csv:
@@ -170,25 +189,55 @@ def run_video(args) -> int:
     return 0
 
 
+def positive_int(value: str) -> int:
+    number = int(value)
+    if number < 1:
+        raise argparse.ArgumentTypeError("must be at least 1")
+    return number
+
+
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Number Plate AI - detect and read Indian number plates.")
-    source = parser.add_mutually_exclusive_group(required=True)
+    parser = argparse.ArgumentParser(
+        description="Number Plate AI - run the local dashboard or process media from the command line."
+    )
+    source = parser.add_mutually_exclusive_group()
     source.add_argument("--image", help="path to an image file")
     source.add_argument("--video", help="path to a video file, or a webcam index such as 0")
     parser.add_argument("--output", help="where to write the annotated image/video")
     parser.add_argument("--csv", help="append detections to this CSV log")
     parser.add_argument("--json", action="store_true", help="print results as JSON")
-    parser.add_argument("--stride", type=int, default=VIDEO_FRAME_STRIDE,
+    parser.add_argument("--stride", type=positive_int, default=VIDEO_FRAME_STRIDE,
                         help="process every Nth video frame (default: %(default)s)")
     parser.add_argument("--show", action="store_true", help="show a live preview window (video only)")
+    parser.add_argument("--host", default="127.0.0.1", help="dashboard bind address (default: %(default)s)")
+    parser.add_argument("--port", type=int, default=8000, help="dashboard port (default: %(default)s)")
+    parser.add_argument("--reload", action="store_true", help="reload automatically while developing")
     parser.add_argument("--verbose", action="store_true", help="enable debug logging")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     return parser
+
+
+def run_server(args) -> int:
+    import uvicorn
+
+    url = f"http://{args.host}:{args.port}"
+    print(f"Number Plate AI {__version__} starting at {url}")
+    print("Keep this window open. Press Ctrl+C to stop.")
+    uvicorn.run("backend.main:app", host=args.host, port=args.port, reload=args.reload)
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     logging.getLogger().setLevel(logging.DEBUG if args.verbose else logging.INFO)
-    return run_image(args) if args.image else run_video(args)
+    if args.image:
+        return run_image(args)
+    if args.video:
+        return run_video(args)
+    if args.output or args.csv or args.json or args.show:
+        print("error: media options require --image or --video", file=sys.stderr)
+        return 2
+    return run_server(args)
 
 
 if __name__ == "__main__":

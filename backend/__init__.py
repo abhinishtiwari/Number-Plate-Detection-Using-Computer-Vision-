@@ -1,3 +1,5 @@
-"""Number Plate AI backend package."""
+"""Number Plate AI package."""
 
-__all__ = ["config", "plate_text", "rto_lookup", "detector", "ocr_engine", "main"]
+__version__ = "2.1.0"
+
+__all__ = ["__version__", "config", "plate_text", "rto_lookup", "detector", "ocr_engine", "main"]

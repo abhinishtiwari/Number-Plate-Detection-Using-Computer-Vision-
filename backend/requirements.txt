@@ -3,7 +3,6 @@
 # --- API ---
 fastapi==0.121.2
 uvicorn[standard]==0.41.0
-gunicorn==23.0.0
 python-multipart==0.0.20
 
 # --- Computer vision ---

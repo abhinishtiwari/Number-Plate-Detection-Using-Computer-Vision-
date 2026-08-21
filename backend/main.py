@@ -21,14 +21,13 @@ from pathlib import Path
 import cv2
 import numpy as np
 from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from PIL import Image, UnidentifiedImageError
 
+from . import __version__
 from .config import (
     ALLOWED_IMAGE_SUFFIXES,
     ALLOWED_VIDEO_SUFFIXES,
-    CORS_ALLOWED_ORIGINS,
     FRONTEND_DIR,
     LOG_LEVEL,
     MAX_IMAGE_PIXELS,
@@ -40,7 +39,6 @@ from .config import (
     PROCESSING_TIMEOUT_SECONDS,
     REQUIRE_KNOWN_RTO,
     ROI_PAD_RATIO,
-    SERVE_FRONTEND,
     VIDEO_FRAME_STRIDE,
     VIDEO_MAX_FRAMES_SCANNED,
 )
@@ -79,22 +77,10 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(
     title="Number Plate AI API",
-    version="2.0.0",
+    version=__version__,
     description="Local ANPR pipeline: plate detection, OpenCV preprocessing, "
                 "offline OCR and RTO dataset lookup.",
     lifespan=lifespan,
-)
-
-# A wildcard origin cannot be combined with credentials; browsers reject it and
-# it would also let any site make credentialed calls. Credentials are only
-# enabled when an explicit origin list is configured.
-_allow_credentials = "*" not in CORS_ALLOWED_ORIGINS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=list(CORS_ALLOWED_ORIGINS),
-    allow_credentials=_allow_credentials,
-    allow_methods=["GET", "POST"],
-    allow_headers=["*"],
 )
 
 # ------------------------------------------------------------------ endpoints
@@ -106,6 +92,7 @@ def health_check() -> dict:
     ocr_status = ocr_engine.status()
     return {
         "status": "ok",
+        "version": __version__,
         "rto_dataset": {
             "file": rto_engine.dataset_path.name,
             "records": rto_engine.record_count,
@@ -130,7 +117,7 @@ def detect_plate(file: UploadFile = File(...)) -> dict:
     """Detect plates without blocking the ASGI event loop.
 
     FastAPI runs this synchronous endpoint in its thread pool, so health checks
-    and Gunicorn heartbeats remain responsive while OpenCV/ONNX does CPU work.
+    and the dashboard stay responsive while OpenCV/ONNX does CPU work.
     The bounded read prevents an oversized request from becoming a second large
     in-memory copy.
     """
@@ -180,17 +167,13 @@ def detect_plate(file: UploadFile = File(...)) -> dict:
     if image is None:
         raise HTTPException(status_code=400, detail="Invalid or corrupt image file.")
 
-    try:
-        plates = process_frame(image)
-        return {
-            "media_type": "image",
-            "image_size": {"width": int(image.shape[1]), "height": int(image.shape[0])},
-            "plates": plates,
-            "plate_count": len(plates),
-        }
-    finally:
-        del image, contents
-        gc.collect()
+    plates = process_frame(image)
+    return {
+        "media_type": "image",
+        "image_size": {"width": int(image.shape[1]), "height": int(image.shape[0])},
+        "plates": plates,
+        "plate_count": len(plates),
+    }
 
 
 # ------------------------------------------------------------------- pipeline
@@ -206,22 +189,26 @@ def process_frame(image: np.ndarray) -> list[dict]:
     results: list[dict] = []
 
     for candidate in _rank_candidates(detector.detect(image)):
-        # A valid, confident full-frame OCR result already came from this exact
-        # region. Re-running OCR over several crop variants is duplicate work
-        # and was the largest source of request time and native allocations.
-        trusted = _trusted_text_hint(candidate)
-        if trusted is not None:
-            result, rto = trusted
-        else:
-            roi = _crop(image, candidate)
-            if roi.size == 0:
-                continue
-            result = ocr_engine.read_plate(roi)
-            result = _prefer_better_reading(result, candidate)
-            rto = rto_engine.lookup(result.reading if result.text else None)
+        # In normal mode this region would be rejected later regardless of OCR.
+        # Skip the expensive crop inference instead of reading badges/text that
+        # have no independent plate-shaped detection evidence.
+        if ONLY_VALID_PLATES and not candidate.geometry_confirmed:
+            logger.debug("Skipping unconfirmed text region %s before OCR.", candidate.box)
+            continue
+
+        roi = _crop(image, candidate)
+        if roi.size == 0:
+            continue
+
+        # Full-frame OCR is useful for locating text, but it is too coarse to be
+        # the final reading for small or multi-line plates. Always re-read the
+        # physical plate crop, then use the hint only as a fallback.
+        result = ocr_engine.read_plate(roi)
+        result = _prefer_better_reading(result, candidate)
+        rto = rto_engine.lookup(result.reading if result.text else None)
 
         if ONLY_VALID_PLATES:
-            rejection = _rejection_reason(result.reading, rto)
+            rejection = _rejection_reason(result.reading, rto, candidate)
             if rejection:
                 logger.debug("Discarding region %s (%r): %s",
                              candidate.box, result.text, rejection)
@@ -235,28 +222,11 @@ def process_frame(image: np.ndarray) -> list[dict]:
     return results
 
 
-def _trusted_text_hint(candidate: PlateCandidate) -> tuple[PlateResult, dict] | None:
-    """Reuse a strong full-frame OCR reading instead of invoking OCR again."""
-    confidence = candidate.text_hint_confidence or 0.0
-    if not candidate.text_hint or confidence < OCR_MIN_CONFIDENCE:
-        return None
-
-    reading = parse(candidate.text_hint)
-    rto = rto_engine.lookup(reading if reading.text else None)
-    if _rejection_reason(reading, rto) is not None:
-        return None
-
-    result = PlateResult(
-        reading=reading,
-        confidence=round(confidence * 100.0, 1),
-        engine="rapidocr:text-box",
-        fragments=[candidate.text_hint],
-    )
-    return result, rto
-
-
-def _rejection_reason(reading: PlateReading, rto: dict) -> str | None:
-    """Why this reading is not a number plate, or None when it is one."""
+def _rejection_reason(reading: PlateReading, rto: dict,
+                      candidate: PlateCandidate | None = None) -> str | None:
+    """Why this reading is not a physical number plate, or None when it is one."""
+    if candidate is not None and not candidate.geometry_confirmed:
+        return "text was not confirmed by a physical plate-shaped region"
     if not reading.text:
         return "nothing readable"
     if not reading.is_valid:
@@ -269,9 +239,13 @@ def _rejection_reason(reading: PlateReading, rto: dict) -> str | None:
 
 
 def _rank_candidates(candidates: list[PlateCandidate]) -> list[PlateCandidate]:
-    """Order candidates by how likely they are to be a plate, then cap the list."""
+    """Order candidates by plate likelihood, then cap expensive crop OCR."""
+    eligible = (
+        [candidate for candidate in candidates if candidate.geometry_confirmed]
+        if ONLY_VALID_PLATES else candidates
+    )
     ordered = sorted(
-        candidates,
+        eligible,
         key=lambda c: (
             c.source == "yolo",
             bool(c.text_hint),                 # a region that already produced text
@@ -286,14 +260,13 @@ def _rank_candidates(candidates: list[PlateCandidate]) -> list[PlateCandidate]:
 
 
 def _prefer_better_reading(result, candidate: PlateCandidate):
-    """Choose between the crop reading and the full-frame text-detection reading.
+    """Use a full-frame hint only when crop OCR found no valid plate.
 
-    Both describe the same region. The crop is usually better, but when the crop
-    includes chrome trim above the plate the engine can return two overlapping
-    text boxes that merge into a doubled reading. The tighter text-anchored read
-    wins when it needs fewer repairs.
+    The crop is the physical plate evidence and must win whenever it validates.
+    A coarse full-frame reading such as ``MH20EUL666`` must never replace a
+    complete crop reading merely because its confidence happens to be higher.
     """
-    if not candidate.text_hint:
+    if result.is_valid or not candidate.text_hint:
         return result
 
     from . import plate_text
@@ -304,13 +277,6 @@ def _prefer_better_reading(result, candidate: PlateCandidate):
         return result
 
     hint_confidence = round((candidate.text_hint_confidence or 0.0) * 100.0, 1)
-    if result.is_valid:
-        if result.reading.corrections < hint.corrections:
-            return result
-        # Equal repair counts: trust whichever read scored higher.
-        if result.reading.corrections == hint.corrections and result.confidence >= hint_confidence:
-            return result
-
     return PlateResult(
         reading=hint,
         confidence=hint_confidence,
@@ -499,23 +465,8 @@ def _process_video(contents: bytes, suffix: str) -> dict:
 
 # --------------------------------------------------------------- static files
 
-# Mounted last so it cannot shadow the API routes above.
-if SERVE_FRONTEND and FRONTEND_DIR.is_dir():
-    app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
-    logger.info("Serving the dashboard from %s", FRONTEND_DIR)
-else:
-    if SERVE_FRONTEND:
-        logger.warning("Frontend directory %s not found; running API-only.", FRONTEND_DIR)
-    else:
-        logger.info("SERVE_FRONTEND is off; running API-only.")
-
-    @app.get("/", include_in_schema=False)
-    def service_info() -> dict:
-        """Root metadata for an API-only deployment, so "/" is not a bare 404."""
-        return {
-            "service": "Number Plate AI API",
-            "version": app.version,
-            "mode": "api-only",
-            "endpoints": ["/health", "/rto-dataset", "/detect", "/docs"],
-            "allowed_origins": list(CORS_ALLOWED_ORIGINS),
-        }
+# Local-only application: the dashboard is always served by this process.
+if not FRONTEND_DIR.is_dir():
+    raise RuntimeError(f"Frontend directory not found: {FRONTEND_DIR}")
+app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
+logger.info("Serving the dashboard from %s", FRONTEND_DIR)

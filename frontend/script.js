@@ -9,56 +9,12 @@
 
 /* ------------------------------------------------------------------ config */
 
-const trimSlashes = (value) => String(value).trim().replace(/\/+$/, "");
-
-/**
- * Resolve the API base URL, in priority order:
- *  1. `?api=` query string, for testing another backend without a redeploy.
- *  2. `window.NUMBER_PLATE_API_URL` from config.js, for an optional override.
- *  3. Local development defaults.
- *  4. Same origin, used by the combined Render service.
- */
-const API_SOURCE = { url: "", from: "" };
-
-const API_URL = (() => {
-  const fromQuery = new URLSearchParams(window.location.search).get("api");
-  if (fromQuery) {
-    API_SOURCE.from = "?api= query string";
-    return trimSlashes(fromQuery);
-  }
-  if (typeof window.NUMBER_PLATE_API_URL === "string" && window.NUMBER_PLATE_API_URL.trim()) {
-    API_SOURCE.from = "config.js";
-    return trimSlashes(window.NUMBER_PLATE_API_URL);
-  }
-  const { protocol, hostname, origin } = window.location;
-  if (protocol === "file:" || hostname === "localhost" || hostname === "127.0.0.1") {
-    API_SOURCE.from = "local default";
-    return "http://127.0.0.1:8000";
-  }
-  API_SOURCE.from = "same origin";
-  return trimSlashes(origin);
-})();
-
-API_SOURCE.url = API_URL;
-
-/**
- * A static host cannot be its own API. Detect that misconfiguration explicitly
- * instead of firing requests at the page's own origin and reporting a confusing
- * network error.
- */
-const API_MISCONFIGURED =
-  API_SOURCE.from === "same origin" &&
-  /\.github\.io$|\.pages\.dev$|\.netlify\.app$|\.vercel\.app$/.test(window.location.hostname);
-
-/** Free Render instances sleep; the first request wakes them and can take ~1 min. */
-const COLD_START_ATTEMPTS = 12;
-const COLD_START_DELAY_MS = 5000;
+const API_URL = window.location.origin;
 
 const HISTORY_KEY = "anpr_history_v6";
 const THEME_KEY = "anpr_theme";
 const HISTORY_LIMIT = 200;
 const DEFAULT_MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
-const DETECTION_TIMEOUT_MS = 90_000;
 
 /* --------------------------------------------------------------- elements */
 
@@ -176,51 +132,20 @@ function hideStatus() {
 
 /* -------------------------------------------------------------- API health */
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-/**
- * Poll /health until the backend answers.
- *
- * This runs once at page load and never blocks the Detect button. A free Render
- * instance spins down when idle, so the first call has to wait for it to boot;
- * without this the dashboard would just say "not reachable" on every cold start.
- */
+/** Check the local API once; the page itself is served by that same process. */
 async function checkBackend() {
-  if (API_MISCONFIGURED) {
-    engineStatus.classList.remove("hidden");
+  engineStatus.classList.remove("hidden");
+  try {
+    const response = await fetch(`${API_URL}/health`, { cache: "no-store" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return applyHealth(await response.json());
+  } catch (err) {
+    console.warn("Local backend health check failed:", err);
     engineStatus.className = "engine-status engine-bad";
     engineStatus.textContent =
-      `No API URL configured. This page is hosted on ${window.location.hostname}, which only ` +
-      `serves static files. Edit frontend/config.js and set NUMBER_PLATE_API_URL to your ` +
-      `backend URL, for example https://your-service.onrender.com`;
-    console.error("NUMBER_PLATE_API_URL is not set; see frontend/config.js");
+      "Local backend is not reachable. Run python main.py from the project folder, then refresh.";
     return false;
   }
-
-  engineStatus.classList.remove("hidden");
-
-  for (let attempt = 1; attempt <= COLD_START_ATTEMPTS; attempt += 1) {
-    try {
-      const response = await fetch(`${API_URL}/health`);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return applyHealth(await response.json());
-    } catch (err) {
-      if (attempt === COLD_START_ATTEMPTS) {
-        console.warn("Backend health check failed:", err);
-        engineStatus.className = "engine-status engine-bad";
-        engineStatus.textContent =
-          `Backend not reachable at ${API_URL} (from ${API_SOURCE.from}). ` +
-          `If it is hosted on a free plan it may still be starting - reload in a minute. ` +
-          `Locally, start it with: uvicorn backend.main:app --port 8000`;
-        return false;
-      }
-      engineStatus.className = "engine-status engine-warn";
-      engineStatus.textContent =
-        `Waking up the backend at ${API_URL}… (attempt ${attempt} of ${COLD_START_ATTEMPTS})`;
-      await sleep(COLD_START_DELAY_MS);
-    }
-  }
-  return false;
 }
 
 /** Render the /health payload into the status line. */
@@ -394,31 +319,12 @@ detectBtn.addEventListener("click", async () => {
     const formData = new FormData();
     formData.append("file", selectedFile);
 
-    const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => controller.abort(), DETECTION_TIMEOUT_MS);
-    let response;
-    try {
-      response = await fetch(`${API_URL}/detect`, {
-        method: "POST",
-        body: formData,
-        signal: controller.signal,
-      });
-    } catch (error) {
-      if (error.name === "AbortError") {
-        throw new Error("Detection exceeded 90 seconds. Try a smaller image or shorter video.");
-      }
-      throw error;
-    } finally {
-      window.clearTimeout(timeoutId);
-    }
-
+    const response = await fetch(`${API_URL}/detect`, {
+      method: "POST",
+      body: formData,
+    });
     const payload = await response.json().catch(() => null);
     if (!response.ok) {
-      if (response.status === 502 || response.status === 503) {
-        throw new Error(
-          "The detection worker restarted or is still waking up. Wait 30 seconds, then try a smaller file.",
-        );
-      }
       throw new Error(payload?.detail || `Request failed with HTTP ${response.status}`);
     }
     if (token !== renderToken) return; // a newer file was selected mid-request
@@ -446,15 +352,10 @@ detectBtn.addEventListener("click", async () => {
     plates.forEach(addToHistory);
   } catch (error) {
     console.error("Detection failed:", error);
-    // A TypeError from fetch means the request never reached the server, which
-    // on a free hosting plan usually means the instance is still waking up.
-    const unreachable = error instanceof TypeError;
-    showStatus(
-      unreachable
-        ? `Could not reach the backend at ${API_URL}. If it is on a free plan it may be starting up - wait a moment and try again.`
-        : error.message || "Detection failed.",
-      "error", false,
-    );
+    const message = error instanceof TypeError
+      ? "Lost connection to the local backend. Run python main.py, refresh, and try again."
+      : error.message || "Detection failed.";
+    showStatus(message, "error", false);
     resultStatusBadge.className = "badge-error";
     resultStatusBadge.textContent = "Error";
   } finally {

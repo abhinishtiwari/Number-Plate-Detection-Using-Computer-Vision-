@@ -4,10 +4,11 @@ Detects Indian number plates in images and videos, reads the registration with a
 local OCR engine, and resolves it to a state, RTO code and city using a local
 CSV dataset.
 
-Everything runs on your machine. No OpenAI, Gemini, paid API or cloud service is
-involved, and no result is ever hard-coded or faked: an unreadable plate is
-reported as unreadable, and an RTO number that is not in the dataset is reported
-as not in the dataset.
+The same integrated application runs locally or as one Render web service. It
+uses no OpenAI, Gemini, paid OCR API, or separate frontend deployment. OCR and
+RTO lookup execute inside the Python process, and no result is hard-coded or
+faked: an unreadable plate is reported as unreadable, and an RTO number absent
+from the dataset is reported as not in the dataset.
 
 ---
 
@@ -18,13 +19,12 @@ Upload (image / video)
         │
         ▼
 Plate localisation ─────── YOLO weights (optional)
-        │                  Text-anchored boxes (OCR text detection)
-        │                  Contour + Haar cascade proposals
+        │                  Contour + Haar physical-region proposals
         ▼                  → merged with NMS + containment
 Crop + pad
         │
         ▼
-OpenCV preprocessing ───── grayscale → upscale → CLAHE
+Local OCR variants ─────── colour → grayscale/upscale → CLAHE (lazy fallbacks)
         │
         ▼
 Local OCR ──────────────── RapidOCR → EasyOCR → Tesseract → template matcher
@@ -39,12 +39,15 @@ RTO lookup ─────────────── India_RTO_Registration_
 JSON result → dashboard
 ```
 
-### Why detection and OCR are linked
+### Physical plate detection and multi-line OCR
 
-The OCR engine's text-detection pass doubles as a plate locator. Because the box
-comes from the text itself, the box drawn on the image is always the region the
-text was read from. Contour and Haar proposals still run, and a nested duplicate
-is merged into the larger box so one plate is reported once.
+Normal mode first finds a physical plate-shaped region using YOLO (when local
+weights are installed), contours, or the bundled Haar cascade. Only those small
+crops are sent to RapidOCR, avoiding a slow and error-prone OCR scan over the
+entire vehicle. OCR fragments inside a crop are ordered top-to-bottom and
+left-to-right, then combined and validated, so one-line and two-line plates are
+returned as one registration. Set `ONLY_VALID_PLATES=0` only for diagnostics;
+it also enables full-frame text proposals.
 
 ### Only plates come back
 
@@ -52,12 +55,13 @@ A photo of a car bumper contains far more text than the plate: a manufacturer
 badge, a dealer sticker, a site watermark, and a dozen high-contrast chrome
 edges. A region is reported only when all of these hold:
 
-1. the text validates against an Indian registration grammar,
-2. it needed no more than `MAX_OCR_CORRECTIONS` ambiguous-character repairs, and
-3. its state+RTO prefix exists in the dataset (Bharat-series and defence plates
+1. a YOLO, contour, or Haar proposal confirms a physical plate-shaped region,
+2. the text validates against an Indian registration grammar,
+3. it needed no more than `MAX_OCR_CORRECTIONS` ambiguous-character repairs, and
+4. its state+RTO prefix exists in the dataset (Bharat-series and defence plates
    are exempt, having no RTO office).
 
-Rule 3 matters more than it looks. Character repair can turn noise into
+Rule 4 matters more than it looks. Character repair can turn noise into
 something merely plate-shaped: the watermark "Team-BHP.com" was read as
 `TG8BHPCO` and repaired into `TG88HPC0`, which is grammatical — but TG-88 is not
 a real RTO, so it is dropped. Set `ONLY_VALID_PLATES=0` to see every candidate
@@ -65,29 +69,31 @@ region with its reading when debugging.
 
 ---
 
-## Quick start
+## Quick start (Windows)
 
-```bash
-python -m venv venv
-venv\Scripts\activate            # Windows
-# source venv/bin/activate       # macOS / Linux
+From the repository root, create one virtual environment and install the pinned
+local dependencies:
 
-pip install -r backend/requirements.txt
-uvicorn backend.main:app --reload --port 8000
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python main.py
 ```
 
-Open <http://127.0.0.1:8000/> — the API serves the dashboard from `frontend/`,
-so the browser talks to the same origin and there is no CORS setup.
+Open <http://127.0.0.1:8000/> and keep the terminal open. Press `Ctrl+C` to
+stop. On later runs, activate `.venv` and run `python main.py` again.
 
-> Run uvicorn from the repository root as `backend.main:app`. `cd backend &&
-> uvicorn main:app` fails, because the modules use package-relative imports.
+`run-local.ps1` is an optional convenience helper; `python main.py` is the
+canonical launcher. The integrated process serves both the dashboard and API.
+Do not open `frontend/index.html` directly.
 
 ### Command line
 
-```bash
-python main.py --image samples/car.jpg --output output/car.jpg
+```powershell
+python main.py --image samples/demo_plate.jpg --output output/demo_plate.jpg
 python main.py --video clip.mp4 --csv output/detections.csv
-python main.py --image car.jpg --json
+python main.py --image samples/demo_plate.jpg --json
 ```
 
 ### Tests
@@ -168,7 +174,8 @@ Fields worth knowing:
 - **`rto_match_level`** — `exact` (prefix in the dataset), `state` (state known,
   RTO number absent), `national` (Bharat series), or `none`.
 - **`is_valid_format`** — whether the text matches an Indian registration grammar.
-  Text that does not is still returned, flagged, and never mapped to a state.
+  Normal mode returns only validated physical plates; set `ONLY_VALID_PLATES=0`
+  when debugging to inspect rejected candidates.
 
 Video responses add `frames_scanned`, `frame_stride`, `fps`, and per plate
 `frame_index`, `timestamp_seconds` and `times_seen`. Clicking a video result in
@@ -216,14 +223,41 @@ in `detection_sources`.
 
 ---
 
+## Deploy to Render
+
+`render.yaml` defines exactly one Python web service. That process serves the
+FastAPI endpoints, static dashboard, RapidOCR models, Haar cascade, and tracked
+RTO CSV together; there is no separate static-site or backend deployment.
+
+1. Push this repository to GitHub.
+2. In the Render dashboard, choose **New → Blueprint** and select the repository.
+3. Render reads the root `render.yaml`; review the `number-plate-ai` service and
+   apply the Blueprint.
+4. Wait for `/health` to become healthy, then open the service URL.
+
+The Blueprint runs `python main.py --host 0.0.0.0 --port $PORT`, installs only
+pinned dependencies, uses one process, and limits native math-library threads to
+reduce memory pressure. The CSV is committed to Git and loads read-only at
+startup, so no database or persistent disk is required.
+
+Render free instances can sleep when idle. The first request after sleep must
+reload Python and OCR models and will be slower than a warm request. Image and
+video uploads remain bounded by the configuration below. Deployment behavior is
+documented in Render's [Blueprint reference](https://render.com/docs/blueprint-spec),
+[FastAPI guide](https://render.com/docs/deploy-fastapi), and
+[health-check guide](https://render.com/docs/health-checks).
+
+---
+
 ## Configuration
 
-All settings are environment variables; see `backend/config.py`.
+Local settings can be overridden with environment variables; see
+`backend/config.py`.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `RTO_DATASET_PATH` | repo root CSV | RTO dataset location |
-| `OCR_ENGINE_ORDER` | `rapidocr,easyocr,tesseract,template` | Engine preference; Render uses only `rapidocr` |
+| `OCR_ENGINE_ORDER` | `rapidocr,easyocr,tesseract,template` | OCR preference order |
 | `OCR_MIN_CONFIDENCE` | `0.30` | Minimum accepted OCR word score |
 | `ONLY_VALID_PLATES` | `1` | Return only valid registrations |
 | `REQUIRE_KNOWN_RTO` | `1` | Require a known state+RTO prefix |
@@ -231,38 +265,19 @@ All settings are environment variables; see `backend/config.py`.
 | `MAX_OCR_CANDIDATES` | `6` | Maximum crop OCR passes per frame |
 | `MAX_UPLOAD_BYTES` | `5242880` | Upload ceiling (5 MB) |
 | `MAX_IMAGE_PIXELS` | `12000000` | Decoded-image safety ceiling |
-| `DETECTION_MAX_EDGE` | `800` | Detector/OCR long edge; boxes are scaled back |
+| `DETECTION_MAX_EDGE` | `800` | OCR/detector long edge |
 | `VIDEO_FRAME_STRIDE` | `30` | Distance between sampled frames |
-| `VIDEO_MAX_FRAMES_SCANNED` | `12` | Sampled-frame cap per request |
+| `VIDEO_MAX_FRAMES_SCANNED` | `12` | Sampled-frame cap |
 | `PROCESSING_TIMEOUT_SECONDS` | `75` | Video processing time budget |
-| `CORS_ALLOWED_ORIGINS` | `*` | Comma-separated browser origins |
 | `YOLO_WEIGHTS_PATH` | `backend/models/plate_yolo.pt` | Optional weights |
 | `LOG_LEVEL` | `INFO` | Logging level |
 
----
+### Avoid stale local code
 
-## Deploying one service on Render
-
-The frontend and API are deployed together from this repository. FastAPI serves
-`frontend/` and the browser calls `/health`, `/rto-dataset`, and `/detect` on the
-same origin. No GitHub Pages workflow, frontend service, Dockerfile, or API URL
-configuration is required.
-
-1. In Render, create or apply the Blueprint from `render.yaml`.
-2. Ensure the service tracks the repository's `main` branch.
-3. Confirm the deployed commit in the Render deploy log.
-4. Open the service URL and verify `/health` before uploading a file.
-
-The Blueprint uses one worker, one native math thread, an 800 px inference edge,
-a 5 MB upload limit, a 12 MP decoded-image limit, and bounded video sampling for
-the free tier. The first request after inactivity can still take time while the
-service wakes and initializes RapidOCR.
-
-If the dashboard still says `max 10 MB`, Render is serving an old commit. Deploy
-the latest `main` commit manually and clear the browser cache.
-
-`/detect` has no authentication or rate limit. Add both before using this as a
-public production service.
+After changing Python files, stop the running process with `Ctrl+C` and start it
+again with `python main.py`. For development-only automatic reload, use
+`python main.py --reload`. The optional `run-local.ps1` helper also checks port
+8000 and stops an older Number Plate AI process from this project.
 
 ---
 
@@ -272,7 +287,7 @@ public production service.
 ├── India_RTO_Registration_Dataset_New.csv   # RTO master dataset (single source of truth)
 ├── backend/
 │   ├── config.py          # every tunable, env-overridable
-│   ├── detector.py        # YOLO / text-anchored / geometric proposals + NMS
+│   ├── detector.py        # YOLO / contour / Haar physical proposals + NMS
 │   ├── ocr_engine.py      # engine chain, preprocessing, honest confidences
 │   ├── plate_text.py      # plate grammar, repair, validation
 │   ├── rto_lookup.py      # CSV loader + prefix resolution
@@ -282,7 +297,7 @@ public production service.
 │   └── requirements.txt
 ├── frontend/              # dashboard (HTML/CSS/JS, no build step)
 ├── tests/                 # pytest suite
-├── main.py                # CLI over the same backend package
+├── main.py                # canonical dashboard launcher + image/video CLI
 ├── requirements.txt       # production dependencies
 └── requirements-dev.txt   # production + test dependencies
 ```
@@ -300,4 +315,6 @@ public production service.
 
 ## License
 
-Open source, free for educational and commercial use.
+No license file is currently included. Copyright remains with the repository
+owner until a license is added; contributors and users should not assume
+commercial-use permission.

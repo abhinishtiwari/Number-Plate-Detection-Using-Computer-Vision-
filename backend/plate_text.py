@@ -34,7 +34,7 @@ DIGIT_FOR_LETTER = {"O": "0", "Q": "0", "D": "0", "I": "1", "L": "1", "J": "1",
 LETTER_FOR_DIGIT = {"0": "O", "1": "I", "2": "Z", "4": "A", "5": "S", "6": "G", "8": "B"}
 
 #: Tokens printed on Indian plates that are not part of the registration.
-NOISE_TOKENS = ("IND", "INDIA", "BHARAT")
+NOISE_TOKENS = ("BHARAT", "INDIA", "IND")
 
 MAX_CANDIDATES = 512
 
@@ -254,10 +254,9 @@ def extract_best(fragments: Iterable[str]) -> PlateReading:
     concatenated blindly, because an engine that returns two boxes for one plate
     would otherwise duplicate the shared characters.
 
-    Ranking is by fewest repairs, then the longest reading, then the simplest
-    construction. Fewest repairs first means a clean complete reading beats a
-    partial one that only validated after a character was swapped; longest next
-    means a truncated fragment cannot beat the assembled plate.
+    Ranking prefers the longest valid reading, then the fewest repairs, then the
+    simplest construction. A complete two-line registration can require one OCR
+    ambiguity repair; it must still beat a clean-looking fragment from one row.
     """
     fragments = [f for f in (clean(f) for f in fragments) if f]
     if not fragments:
@@ -279,12 +278,12 @@ def extract_best(fragments: Iterable[str]) -> PlateReading:
     plate_like = [(tier, r) for tier, r in readings
                   if r.is_valid and r.plate_format in ("standard", "bharat")]
     if plate_like:
-        plate_like.sort(key=lambda item: (item[1].corrections, -len(item[1].text), item[0]))
+        plate_like.sort(key=lambda item: (-len(item[1].text), item[1].corrections, item[0]))
         return plate_like[0][1]
 
     other_valid = [(tier, r) for tier, r in readings if r.is_valid]
     if other_valid:
-        other_valid.sort(key=lambda item: (item[1].corrections, -len(item[1].text), item[0]))
+        other_valid.sort(key=lambda item: (-len(item[1].text), item[1].corrections, item[0]))
         return other_valid[0][1]
 
     # Nothing validated; return the longest reading so the caller can report what

@@ -1,8 +1,8 @@
-"""Central configuration for the Number Plate AI backend.
+"""Central configuration for the local Number Plate AI application.
 
-Every tunable lives here so that no detection/OCR threshold is buried as a
-magic number inside the pipeline. All values can be overridden with
-environment variables, which is what the Docker image and CI use.
+Every tunable lives here so detection and OCR thresholds are not buried as
+magic numbers. Values may be overridden with environment variables for local
+experiments.
 """
 from __future__ import annotations
 
@@ -62,8 +62,8 @@ YOLO_WEIGHTS_PATH = Path(_env_str("YOLO_WEIGHTS_PATH", str(BACKEND_DIR / "models
 
 # ------------------------------------------------------------------- uploads
 
-#: Hard ceiling on upload size. The deployed free-tier service keeps this low
-#: because encoded size is not the same as decoded image memory.
+#: Hard ceiling on upload size. Encoded size is not the same as decoded image
+#: memory, so decoded dimensions are checked separately below.
 MAX_UPLOAD_BYTES = _env_int("MAX_UPLOAD_BYTES", 5 * 1024 * 1024)
 
 #: Reject compressed images that expand beyond this many pixels before OpenCV
@@ -138,19 +138,8 @@ TESSERACT_CANDIDATE_PATHS = (
 VIDEO_FRAME_STRIDE = _env_int("VIDEO_FRAME_STRIDE", 30)
 VIDEO_MAX_FRAMES_SCANNED = _env_int("VIDEO_MAX_FRAMES_SCANNED", 12)
 
-#: Stop synchronous media work before the hosting proxy/worker timeout. This is
-#: checked between sampled video frames; images get the same frontend deadline.
+#: Keep video uploads bounded so an accidental long clip does not occupy the
+#: local OCR worker indefinitely. Checked between sampled frames.
 PROCESSING_TIMEOUT_SECONDS = _env_float("PROCESSING_TIMEOUT_SECONDS", 75.0)
-
-# ----------------------------------------------------------------------- API
-
-#: Comma separated list of allowed browser origins. "*" disables credentials.
-CORS_ALLOWED_ORIGINS = tuple(
-    o.strip() for o in _env_str("CORS_ALLOWED_ORIGINS", "*").split(",") if o.strip()
-)
-
-#: Serve the dashboard from this process. This is enabled for the combined
-#: Render service so browser and API requests share one origin.
-SERVE_FRONTEND = _env_flag("SERVE_FRONTEND", True)
 
 LOG_LEVEL = _env_str("LOG_LEVEL", "INFO").upper()

@@ -1,44 +1,46 @@
-# Render blueprint - single service serving both API and frontend.
+# One integrated Render service: dashboard + API + local OCR + RTO dataset.
 services:
   - type: web
     name: number-plate-ai
     runtime: python
-    buildCommand: pip install --no-cache-dir -r requirements.txt
-    startCommand: gunicorn backend.main:app --worker-class uvicorn.workers.UvicornWorker --workers 1 --threads 1 --timeout 120 --bind 0.0.0.0:$PORT
     plan: free
     region: singapore
+    branch: main
+    autoDeployTrigger: commit
+    buildCommand: python -m pip install --no-cache-dir -r requirements.txt
+    startCommand: python main.py --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
-    autoDeploy: true
+    maxShutdownDelaySeconds: 30
     envVars:
-      - key: SERVE_FRONTEND
+      - key: PYTHON_VERSION
+        value: "3.14.3"
+      - key: PYTHONUNBUFFERED
         value: "1"
-      - key: CORS_ALLOWED_ORIGINS
-        value: "*"
+      - key: OCR_ENGINE_ORDER
+        value: rapidocr,template
+      - key: ONLY_VALID_PLATES
+        value: "1"
+      - key: REQUIRE_KNOWN_RTO
+        value: "1"
       - key: OMP_NUM_THREADS
-        value: "1"
-      - key: ONNXRUNTIME_NUM_THREADS
         value: "1"
       - key: OPENBLAS_NUM_THREADS
         value: "1"
       - key: MKL_NUM_THREADS
         value: "1"
+      - key: MALLOC_ARENA_MAX
+        value: "2"
       - key: DETECTION_MAX_EDGE
         value: "800"
       - key: MAX_OCR_CANDIDATES
         value: "6"
-      - key: OCR_ENGINE_ORDER
-        value: "rapidocr"
+      - key: MAX_UPLOAD_BYTES
+        value: "5242880"
+      - key: MAX_IMAGE_PIXELS
+        value: "12000000"
       - key: VIDEO_FRAME_STRIDE
         value: "30"
       - key: VIDEO_MAX_FRAMES_SCANNED
         value: "12"
       - key: PROCESSING_TIMEOUT_SECONDS
         value: "75"
-      - key: MAX_UPLOAD_BYTES
-        value: "5242880"
-      - key: MAX_IMAGE_PIXELS
-        value: "12000000"
-      - key: PYTHON_VERSION
-        value: "3.12.3"
-      - key: MALLOC_ARENA_MAX
-        value: "2"

@@ -66,6 +66,31 @@ def _quad_to_box(quad: Sequence[Sequence[float]]) -> tuple[int, int, int, int]:
     return x1, y1, max(1, x2 - x1), max(1, y2 - y1)
 
 
+def _reading_order(regions: list[TextRegion]) -> list[TextRegion]:
+    """Order OCR boxes by visual row, then left-to-right within each row."""
+    rows: list[list[TextRegion]] = []
+    for region in sorted(regions, key=lambda r: r.box[1] + r.box[3] / 2):
+        _, y, _, h = region.box
+        center = y + h / 2
+        matching_row = None
+        for row in rows:
+            centers = [r.box[1] + r.box[3] / 2 for r in row]
+            heights = [r.box[3] for r in row]
+            if abs(center - float(np.mean(centers))) <= 0.55 * max(h, float(np.mean(heights))):
+                matching_row = row
+                break
+        if matching_row is None:
+            rows.append([region])
+        else:
+            matching_row.append(region)
+
+    rows.sort(key=lambda row: min(r.box[1] for r in row))
+    ordered: list[TextRegion] = []
+    for row in rows:
+        ordered.extend(sorted(row, key=lambda r: r.box[0]))
+    return ordered
+
+
 # --------------------------------------------------------------------- engines
 
 
@@ -345,49 +370,70 @@ class OCREngine:
             return []
 
     @staticmethod
-    def preprocess(roi: np.ndarray) -> list[np.ndarray]:
-        """Build a small set of crops to try, cheapest/most faithful first.
+    def _preprocessed_variants(roi: np.ndarray):
+        """Yield OCR crops lazily, cheapest/most faithful first.
 
-        Note there is no aggressive inner crop here: the old 8%/5% trim removed
-        real characters from tight boxes.
+        RapidOCR commonly succeeds on the original colour crop. Grayscale,
+        upscaling, and CLAHE are therefore computed only when a previous attempt
+        failed, while preserving every fallback used for difficult plates.
         """
         if roi is None or roi.size == 0:
-            return []
+            return
 
-        gray = roi if roi.ndim == 2 else cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+        if roi.ndim == 3:
+            yield roi
+            gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = roi
+
         h, w = gray.shape[:2]
         if h == 0 or w == 0:
-            return []
+            return
 
-        # Upscale small crops to roughly 96 px tall, preserving aspect ratio.
         target_h = 96
         if h < target_h:
             scale = target_h / h
             gray = cv2.resize(gray, (max(1, int(round(w * scale))), target_h),
                               interpolation=cv2.INTER_CUBIC)
+        yield gray
 
         clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-        equalised = clahe.apply(gray)
+        yield clahe.apply(gray)
 
-        # Keep variant count low to save memory on constrained hosts.
-        variants = [gray, equalised]
-        if roi.ndim == 3:
-            variants.insert(0, roi)  # neural engines do better on the colour crop
-        return variants
+    @staticmethod
+    def preprocess(roi: np.ndarray) -> list[np.ndarray]:
+        """Return all preprocessing variants for callers that need inspection."""
+        return list(OCREngine._preprocessed_variants(roi))
 
     def read_plate(self, roi: np.ndarray) -> PlateResult:
         """Read one plate crop, trying each engine and image variant in turn."""
-        variants = self.preprocess(roi)
-        if not variants:
+        if roi is None or roi.size == 0:
             return PlateResult(reading=plate_text.parse(""))
 
+        # Variants are created on demand and cached only if another OCR engine
+        # needs the same fallback image.
+        variant_source = iter(self._preprocessed_variants(roi))
+        variants: list[np.ndarray] = []
+        variants_exhausted = False
+        best_valid: PlateResult | None = None
         best_invalid: PlateResult | None = None
 
         for name in self._order:
             engine = self._engine(name)
             if engine is None:
                 continue
-            for variant in variants:
+            variant_index = 0
+            while True:
+                if variant_index == len(variants):
+                    if variants_exhausted:
+                        break
+                    try:
+                        variants.append(next(variant_source))
+                    except StopIteration:
+                        variants_exhausted = True
+                        break
+                variant = variants[variant_index]
+                variant_index += 1
                 try:
                     regions = engine.detect_and_read(variant)
                 except Exception as exc:  # noqa: BLE001 - visible, then continue
@@ -399,21 +445,46 @@ class OCREngine:
                 if not usable:
                     continue
 
-                usable.sort(key=lambda r: r.box[0])
+                usable = _reading_order(usable)
                 fragments = [r.text for r in usable]
                 reading = plate_text.extract_best(fragments)
                 confidence = round(float(np.mean([r.confidence for r in usable])) * 100.0, 1)
 
                 if reading.is_valid and reading.plate_format in ("standard", "bharat"):
-                    logger.info("%s read plate %s (%.1f%% confidence)", name, reading.text, confidence)
-                    return PlateResult(reading=reading, confidence=confidence,
-                                       engine=name, fragments=fragments)
+                    candidate_result = PlateResult(
+                        reading=reading, confidence=confidence,
+                        engine=name, fragments=fragments,
+                    )
+                    complete = (
+                        reading.plate_format == "bharat"
+                        or len(reading.number) == 4
+                    )
+                    if complete:
+                        logger.info("%s read plate %s (%.1f%% confidence)",
+                                    name, reading.text, confidence)
+                        return candidate_result
+
+                    # A 1-3 digit serial can be legal, but it can also be one
+                    # row of a multi-line plate whose lower digits were missed.
+                    # Try the remaining lazy variants before accepting it.
+                    if (best_valid is None
+                            or (len(reading.number), -reading.corrections, confidence)
+                            > (len(best_valid.reading.number),
+                               -best_valid.reading.corrections,
+                               best_valid.confidence)):
+                        best_valid = candidate_result
+                    continue
 
                 # Remember the best unvalidated reading, but never from the
                 # template matcher - unvalidated template output is noise.
                 if name != _TemplateMatcher.name and reading.text and best_invalid is None:
                     best_invalid = PlateResult(reading=reading, confidence=confidence,
                                               engine=name, fragments=fragments)
+
+        if best_valid is not None:
+            logger.info("%s read short-serial plate %s (%.1f%% confidence)",
+                        best_valid.engine, best_valid.text, best_valid.confidence)
+            return best_valid
 
         if best_invalid is not None:
             logger.info("OCR produced %r but it is not a valid Indian registration.",
