@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="320" viewBox="0 0 1200 320" role="img" aria-labelledby="title desc">
+  <title id="title">Number Plate AI</title>
+  <desc id="desc">A local-first Indian automatic number plate recognition pipeline</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#071426"/>
+      <stop offset="0.55" stop-color="#102a43"/>
+      <stop offset="1" stop-color="#073b4c"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#38bdf8"/>
+      <stop offset="1" stop-color="#34d399"/>
+    </linearGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="7" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <rect width="1200" height="320" rx="24" fill="url(#bg)"/>
+  <g opacity="0.13" stroke="#7dd3fc" fill="none">
+    <path d="M0 66h180l42 42h160M1200 66h-180l-42 42H818M0 255h230l32-32h145M1200 255H970l-32-32H793"/>
+    <circle cx="180" cy="66" r="5" fill="#7dd3fc"/><circle cx="1020" cy="66" r="5" fill="#7dd3fc"/>
+    <circle cx="230" cy="255" r="5" fill="#7dd3fc"/><circle cx="970" cy="255" r="5" fill="#7dd3fc"/>
+  </g>
+  <g transform="translate(95 65)">
+    <rect x="0" y="0" width="270" height="170" rx="24" fill="#0b1f35" stroke="url(#accent)" stroke-width="4"/>
+    <path d="M45 44h180c16 0 29 13 29 29v48c0 16-13 29-29 29H45c-16 0-29-13-29-29V73c0-16 13-29 29-29z" fill="#f8fafc"/>
+    <rect x="35" y="62" width="200" height="70" rx="10" fill="#e2e8f0" stroke="#0f172a" stroke-width="3"/>
+    <text x="135" y="108" text-anchor="middle" font-family="Arial, sans-serif" font-size="33" font-weight="700" letter-spacing="3" fill="#0f172a">MH 12 AI</text>
+    <path d="M10 25h38M10 25v38M260 25h-38M260 25v38M10 145h38M10 145v-38M260 145h-38M260 145v-38" stroke="#34d399" stroke-width="5" stroke-linecap="round" filter="url(#glow)"/>
+  </g>
+  <g transform="translate(420 68)">
+    <text x="0" y="54" font-family="Arial, sans-serif" font-size="62" font-weight="800" fill="#f8fafc">Number Plate <tspan fill="#38bdf8">AI</tspan></text>
+    <text x="2" y="100" font-family="Arial, sans-serif" font-size="24" font-weight="600" fill="#a7f3d0">Detect. Read. Validate. Resolve.</text>
+    <text x="2" y="139" font-family="Arial, sans-serif" font-size="18" fill="#cbd5e1">Local OCR + physical plate detection + Indian RTO lookup</text>
+    <rect x="2" y="164" width="575" height="3" rx="2" fill="url(#accent)"/>
+    <text x="2" y="197" font-family="Arial, sans-serif" font-size="15" fill="#94a3b8">FastAPI  |  OpenCV  |  RapidOCR  |  ONNX Runtime  |  CSV</text>
+  </g>
+</svg>

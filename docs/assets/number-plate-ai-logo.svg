@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="430" height="110" viewBox="0 0 430 110" role="img" aria-labelledby="title desc">
+  <title id="title">Number Plate AI logo</title>
+  <desc id="desc">A scanning frame around an Indian number plate beside the Number Plate AI wordmark</desc>
+  <defs>
+    <linearGradient id="scan" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#38bdf8"/>
+      <stop offset="1" stop-color="#34d399"/>
+    </linearGradient>
+  </defs>
+  <rect width="430" height="110" rx="18" fill="#071426"/>
+  <g transform="translate(8 12)">
+    <rect x="7" y="15" width="106" height="58" rx="10" fill="#f8fafc" stroke="#94a3b8" stroke-width="2"/>
+    <rect x="18" y="27" width="84" height="34" rx="5" fill="#e2e8f0" stroke="#0f172a" stroke-width="2"/>
+    <text x="60" y="50" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="800" letter-spacing="1" fill="#0f172a">IND AI</text>
+    <path d="M0 24V5h20M120 24V5h-20M0 64v19h20M120 64v19h-20" fill="none" stroke="url(#scan)" stroke-width="6" stroke-linecap="round"/>
+  </g>
+  <g transform="translate(145 25)" font-family="Arial, sans-serif">
+    <text x="0" y="32" font-size="34" font-weight="800" fill="#e2e8f0">Number Plate</text>
+    <text x="230" y="32" font-size="34" font-weight="800" fill="#38bdf8">AI</text>
+    <text x="2" y="58" font-size="14" font-weight="600" letter-spacing="2" fill="#94a3b8">LOCAL ANPR PIPELINE</text>
+  </g>
+</svg>

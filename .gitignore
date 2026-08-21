@@ -9,8 +9,9 @@ venv/
 ENV/
 env/
 
-# Output & logs
+# Output, logs, and private study material
 output/
+private/
 *.log
 
 # Detection CSV logs written by the CLI (--csv).
