@@ -2,12 +2,14 @@
 import the `backend` package whichever directory pytest is invoked from."""
 from __future__ import annotations
 
+from io import BytesIO
 import sys
 from pathlib import Path
 
 import cv2
 import numpy as np
 import pytest
+from PIL import Image
 
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
@@ -31,6 +33,14 @@ def encode_jpeg(image: np.ndarray) -> bytes:
     ok, buffer = cv2.imencode(".jpg", image)
     assert ok, "failed to encode the test image"
     return buffer.tobytes()
+
+
+def encode_webp(image: np.ndarray) -> bytes:
+    """Encode through Pillow so tests do not depend on OpenCV's WebP codec."""
+    rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    buffer = BytesIO()
+    Image.fromarray(rgb).save(buffer, format="WEBP", quality=85)
+    return buffer.getvalue()
 
 
 @pytest.fixture(scope="session")

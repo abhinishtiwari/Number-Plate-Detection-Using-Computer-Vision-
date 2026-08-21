@@ -2,14 +2,14 @@
 
 # --- API ---
 fastapi==0.121.2
-uvicorn[standard]==0.41.0
+uvicorn==0.41.0
 python-multipart==0.0.20
 
 # --- Computer vision ---
-# opencv-contrib-python (not opencv-python) because the Haar cascade proposal
-# stage needs cv2.CascadeClassifier. Installing both distributions clobbers the
-# cv2 package, so pick exactly one.
-opencv-contrib-python==5.0.0.93
+# RapidOCR already requires opencv-python. Pin that same distribution directly;
+# installing opencv-contrib-python as well makes both wheels overwrite the cv2
+# package and caused the Render worker to crash while processing WebP uploads.
+opencv-python==5.0.0.93
 numpy==2.5.2
 pillow==12.1.0
 

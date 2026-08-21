@@ -96,7 +96,10 @@ ROI_PAD_RATIO = _env_float("ROI_PAD_RATIO", 0.06)
 #: Upper bound on regions sent to OCR per frame. The geometric detector proposes
 #: many boxes on chrome trim and reflections; without a cap every one costs an
 #: OCR pass. Candidates are ranked before the cap is applied.
-MAX_OCR_CANDIDATES = _env_int("MAX_OCR_CANDIDATES", 6)
+MAX_OCR_CANDIDATES = _env_int(
+    "MAX_OCR_CANDIDATES",
+    3 if (os.environ.get("RENDER") or os.environ.get("RENDER_SERVICE_ID")) else 6,
+)
 
 #: When true (the default) only readings that validate as a real Indian
 #: registration are returned. This is what keeps manufacturer badges ("FORD"),

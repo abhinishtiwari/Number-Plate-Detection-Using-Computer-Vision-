@@ -17,12 +17,13 @@ import time
 from contextlib import asynccontextmanager
 from io import BytesIO
 from pathlib import Path
+from threading import Lock
 
 import cv2
 import numpy as np
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.staticfiles import StaticFiles
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 from . import __version__
 from .config import (
@@ -56,6 +57,12 @@ logger = logging.getLogger(__name__)
 #: The detector shares the OCR engine so it can use the full-frame text pass to
 #: anchor plate proposals on real text.
 detector = PlateDetector(ocr=ocr_engine)
+
+
+#: OCR/ONNX inference is memory-heavy and not guaranteed to be thread-safe.
+#: A single process can still receive concurrent FastAPI thread-pool requests,
+#: so serialize media inference while keeping health/static routes responsive.
+_inference_lock = Lock()
 
 
 @asynccontextmanager
@@ -141,7 +148,8 @@ def detect_plate(file: UploadFile = File(...)) -> dict:
         )
 
     if is_video:
-        return _process_video(contents, suffix or ".mp4")
+        with _inference_lock:
+            return _process_video(contents, suffix or ".mp4")
     if not is_image:
         raise HTTPException(
             status_code=400,
@@ -151,23 +159,28 @@ def detect_plate(file: UploadFile = File(...)) -> dict:
         )
 
     try:
+        # Decode with Pillow instead of cv2.imdecode. The Linux OpenCV WebP
+        # decoder crashed the Render worker (HTTP 502) for otherwise valid
+        # uploads. Pillow also applies camera orientation before conversion.
         with Image.open(BytesIO(contents)) as probe:
             width, height = probe.size
+            if width <= 0 or height <= 0 or width * height > MAX_IMAGE_PIXELS:
+                max_megapixels = MAX_IMAGE_PIXELS / 1_000_000
+                raise HTTPException(
+                    status_code=413,
+                    detail=("Decoded image is too large; maximum is "
+                            f"{max_megapixels:g} megapixels."),
+                )
+            rgb_image = ImageOps.exif_transpose(probe).convert("RGB")
+            rgb_array = np.asarray(rgb_image, dtype=np.uint8)
+    except Image.DecompressionBombError:
+        raise HTTPException(status_code=413, detail="Decoded image is too large.") from None
     except (UnidentifiedImageError, OSError, ValueError):
         raise HTTPException(status_code=400, detail="Invalid or corrupt image file.") from None
 
-    if width <= 0 or height <= 0 or width * height > MAX_IMAGE_PIXELS:
-        max_megapixels = MAX_IMAGE_PIXELS / 1_000_000
-        raise HTTPException(
-            status_code=413,
-            detail=f"Decoded image is too large; maximum is {max_megapixels:g} megapixels.",
-        )
-
-    image = cv2.imdecode(np.frombuffer(contents, np.uint8), cv2.IMREAD_COLOR)
-    if image is None:
-        raise HTTPException(status_code=400, detail="Invalid or corrupt image file.")
-
-    plates = process_frame(image)
+    image = cv2.cvtColor(rgb_array, cv2.COLOR_RGB2BGR)
+    with _inference_lock:
+        plates = process_frame(image)
     return {
         "media_type": "image",
         "image_size": {"width": int(image.shape[1]), "height": int(image.shape[0])},

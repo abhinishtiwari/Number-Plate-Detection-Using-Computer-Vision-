@@ -8,7 +8,7 @@ import cv2
 import numpy as np
 import pytest
 
-from conftest import encode_jpeg, render_plate_image
+from conftest import encode_jpeg, encode_webp, render_plate_image
 
 PLATE = "MH12DE1433"
 
@@ -69,6 +69,16 @@ def test_missing_content_type_falls_back_to_the_extension(client):
     image = render_plate_image(PLATE)
     response = client.post("/detect", files={"file": ("car.jpg", encode_jpeg(image), None)})
     assert response.status_code == 200
+
+
+def test_webp_upload_uses_safe_decoder(client):
+    """WebP decoding must not crash the worker (observed as Render HTTP 502)."""
+    image = render_plate_image(PLATE)
+    response = client.post(
+        "/detect", files={"file": ("car.webp", encode_webp(image), "image/webp")}
+    )
+    assert response.status_code == 200
+    assert response.json()["media_type"] == "image"
 
 
 def test_image_without_a_plate_returns_no_results(client):

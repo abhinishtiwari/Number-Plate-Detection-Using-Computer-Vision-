@@ -241,8 +241,11 @@ reduce memory pressure. The CSV is committed to Git and loads read-only at
 startup, so no database or persistent disk is required.
 
 Render free instances can sleep when idle. The first request after sleep must
-reload Python and OCR models and will be slower than a warm request. Image and
-video uploads remain bounded by the configuration below. Deployment behavior is
+reload Python and OCR models and will be slower than a warm request. The hosted
+service uses Python 3.12, one serialized OCR inference at a time, Pillow for safe
+JPEG/PNG/WebP decoding, and at most three OCR candidates per frame to stay
+within the free instance's CPU and memory limits. Image and video uploads remain
+bounded by the configuration below. Deployment behavior is
 documented in Render's [Blueprint reference](https://render.com/docs/blueprint-spec),
 [FastAPI guide](https://render.com/docs/deploy-fastapi), and
 [health-check guide](https://render.com/docs/health-checks).

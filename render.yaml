@@ -13,11 +13,11 @@ services:
     maxShutdownDelaySeconds: 30
     envVars:
       - key: PYTHON_VERSION
-        value: "3.14.3"
+        value: "3.12.3"
       - key: PYTHONUNBUFFERED
         value: "1"
       - key: OCR_ENGINE_ORDER
-        value: rapidocr,template
+        value: rapidocr
       - key: ONLY_VALID_PLATES
         value: "1"
       - key: REQUIRE_KNOWN_RTO
@@ -33,7 +33,7 @@ services:
       - key: DETECTION_MAX_EDGE
         value: "800"
       - key: MAX_OCR_CANDIDATES
-        value: "6"
+        value: "3"
       - key: MAX_UPLOAD_BYTES
         value: "5242880"
       - key: MAX_IMAGE_PIXELS
