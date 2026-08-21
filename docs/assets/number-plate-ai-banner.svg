@@ -1,36 +1,52 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="320" viewBox="0 0 1200 320" role="img" aria-labelledby="title desc">
-  <title id="title">Number Plate AI</title>
-  <desc id="desc">A local-first Indian automatic number plate recognition pipeline</desc>
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#071426"/>
-      <stop offset="0.55" stop-color="#102a43"/>
-      <stop offset="1" stop-color="#073b4c"/>
-    </linearGradient>
-    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#38bdf8"/>
-      <stop offset="1" stop-color="#34d399"/>
-    </linearGradient>
-    <filter id="glow"><feGaussianBlur stdDeviation="7" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-  </defs>
-  <rect width="1200" height="320" rx="24" fill="url(#bg)"/>
-  <g opacity="0.13" stroke="#7dd3fc" fill="none">
-    <path d="M0 66h180l42 42h160M1200 66h-180l-42 42H818M0 255h230l32-32h145M1200 255H970l-32-32H793"/>
-    <circle cx="180" cy="66" r="5" fill="#7dd3fc"/><circle cx="1020" cy="66" r="5" fill="#7dd3fc"/>
-    <circle cx="230" cy="255" r="5" fill="#7dd3fc"/><circle cx="970" cy="255" r="5" fill="#7dd3fc"/>
-  </g>
-  <g transform="translate(95 65)">
-    <rect x="0" y="0" width="270" height="170" rx="24" fill="#0b1f35" stroke="url(#accent)" stroke-width="4"/>
-    <path d="M45 44h180c16 0 29 13 29 29v48c0 16-13 29-29 29H45c-16 0-29-13-29-29V73c0-16 13-29 29-29z" fill="#f8fafc"/>
-    <rect x="35" y="62" width="200" height="70" rx="10" fill="#e2e8f0" stroke="#0f172a" stroke-width="3"/>
-    <text x="135" y="108" text-anchor="middle" font-family="Arial, sans-serif" font-size="33" font-weight="700" letter-spacing="3" fill="#0f172a">MH 12 AI</text>
-    <path d="M10 25h38M10 25v38M260 25h-38M260 25v38M10 145h38M10 145v-38M260 145h-38M260 145v-38" stroke="#34d399" stroke-width="5" stroke-linecap="round" filter="url(#glow)"/>
-  </g>
-  <g transform="translate(420 68)">
-    <text x="0" y="54" font-family="Arial, sans-serif" font-size="62" font-weight="800" fill="#f8fafc">Number Plate <tspan fill="#38bdf8">AI</tspan></text>
-    <text x="2" y="100" font-family="Arial, sans-serif" font-size="24" font-weight="600" fill="#a7f3d0">Detect. Read. Validate. Resolve.</text>
-    <text x="2" y="139" font-family="Arial, sans-serif" font-size="18" fill="#cbd5e1">Local OCR + physical plate detection + Indian RTO lookup</text>
-    <rect x="2" y="164" width="575" height="3" rx="2" fill="url(#accent)"/>
-    <text x="2" y="197" font-family="Arial, sans-serif" font-size="15" fill="#94a3b8">FastAPI  |  OpenCV  |  RapidOCR  |  ONNX Runtime  |  CSV</text>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" viewBox="0 0 1200 700" role="img" aria-labelledby="title desc">
+<title id="title">Number Plate AI workflow</title><desc id="desc">A neon vehicle scanner illustrating capture, recognize, validate, and RTO lookup</desc>
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#020717"/><stop offset=".55" stop-color="#03051a"/><stop offset="1" stop-color="#0b0521"/></linearGradient>
+  <linearGradient id="road" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#1377ff"/><stop offset=".5" stop-color="#2de2ff"/><stop offset="1" stop-color="#bd38ff"/></linearGradient>
+  <linearGradient id="car" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#143f85"/><stop offset=".35" stop-color="#070c25"/><stop offset=".8" stop-color="#13082e"/><stop offset="1" stop-color="#5422af"/></linearGradient>
+  <radialGradient id="lens"><stop stop-color="#eefcff"/><stop offset=".12" stop-color="#1d79ff"/><stop offset=".32" stop-color="#07112b"/><stop offset=".52" stop-color="#7049ff"/><stop offset=".72" stop-color="#040718"/><stop offset="1" stop-color="#a13cff"/></radialGradient>
+  <filter id="glow"><feGaussianBlur stdDeviation="7" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  <filter id="soft"><feGaussianBlur stdDeviation="22"/></filter>
+</defs>
+<rect x="7" y="7" width="1186" height="686" rx="25" fill="url(#bg)" stroke="#303a8d" stroke-width="2"/>
+<!-- skyline -->
+<g transform="translate(865 68)" opacity=".55" fill="#07133a" stroke="#243fb5" stroke-width="2">
+  <path d="M0 180V95h35V53h28v127M73 180V117h38V78h28v102M151 180V35h37v145M200 180V99h36v81M247 180V59h42v121"/>
+  <g fill="#3d5cff" stroke="none" opacity=".65"><circle cx="18" cy="112" r="2"/><circle cx="49" cy="72" r="2"/><circle cx="92" cy="137" r="2"/><circle cx="169" cy="60" r="2"/><circle cx="220" cy="119" r="2"/><circle cx="267" cy="79" r="2"/></g>
+</g>
+<!-- road and energy trails -->
+<ellipse cx="600" cy="395" rx="500" ry="115" fill="#0a0c2b" stroke="#192c67" stroke-width="2"/>
+<g fill="none" filter="url(#glow)">
+  <path d="M50 480C190 290 360 350 478 385S735 471 1150 304" stroke="url(#road)" stroke-width="5" opacity=".85"/>
+  <path d="M40 506C190 334 334 392 482 420S742 492 1160 342" stroke="#405cff" stroke-width="2" stroke-dasharray="16 16"/>
+  <path d="M105 540C220 390 390 430 510 448S760 506 1090 406" stroke="#b734ff" stroke-width="3" opacity=".7"/>
+</g>
+<!-- car -->
+<g transform="translate(300 105)">
+  <path d="M75 214l42-117q12-35 55-47L300 20l128 30q43 12 55 47l42 117 44 58-25 105H56L31 272z" fill="url(#car)" stroke="#316dff" stroke-width="5"/>
+  <path d="M145 106q15-34 48-43l107-25 107 25q33 9 48 43l20 60H125z" fill="#030819" stroke="#1d3986" stroke-width="4"/>
+  <path d="M74 222l132 13-59 48-91-16zM526 222l-132 13 59 48 91-16z" fill="#f2fbff" stroke="#4a9cff" stroke-width="8" filter="url(#glow)"/>
+  <path d="M82 325q218 70 436 0" fill="none" stroke="#1c57db" stroke-width="7"/>
+  <path d="M116 371q184 37 368 0" fill="none" stroke="#503be4" stroke-width="5"/>
+  <!-- scanner corners -->
+  <g fill="none" stroke-linecap="round" stroke-width="14" filter="url(#glow)"><path d="M147 28V4h45M453 28V4h-45" stroke="#4d66ff"/><path d="M147 28V4h45" stroke="#24dcff" opacity=".6"/><path d="M453 28V4h-45" stroke="#bf4dff" opacity=".8"/></g>
+  <!-- lens -->
+  <g transform="translate(300 119)" filter="url(#glow)"><circle r="92" fill="#05081c" stroke="#5658ff" stroke-width="10"/><circle r="72" fill="url(#lens)" stroke="#bf50ff" stroke-width="7"/><circle r="50" fill="#030714" stroke="#338bff" stroke-width="8"/><circle r="29" fill="url(#lens)"/><circle cx="18" cy="-23" r="13" fill="#f2feff"/></g>
+  <!-- plate -->
+  <g transform="translate(122 267)"><rect width="356" height="112" rx="18" fill="#070b20" stroke="#7a5dff" stroke-width="8" filter="url(#glow)"/><rect x="12" y="12" width="332" height="88" rx="12" fill="#f4f5f8" stroke="#aeb9cc" stroke-width="3"/><circle cx="29" cy="56" r="8" fill="#263042"/><circle cx="327" cy="56" r="8" fill="#263042"/><text x="178" y="73" text-anchor="middle" font-family="Arial" font-size="52" font-weight="900" letter-spacing="12" fill="#0a1020">* * * * *</text></g>
+</g>
+<!-- location pin -->
+<g transform="translate(1080 258)" filter="url(#glow)"><path d="M0-28a27 27 0 0 1 27 27C27 22 0 48 0 48S-27 22-27-1A27 27 0 0 1 0-28z" fill="#7628bc" stroke="#d85cff" stroke-width="4"/><circle cy="-1" r="9" fill="#05071b" stroke="#ff9cff" stroke-width="3"/><ellipse cy="55" rx="36" ry="9" fill="none" stroke="#b843ff" stroke-width="3"/></g>
+<!-- tagline -->
+<text x="600" y="466" text-anchor="middle" font-family="Arial, sans-serif" font-size="23" font-weight="700" letter-spacing="8"><tspan fill="#2f8cff">CAPTURE</tspan><tspan fill="#6f6cba">  •  </tspan><tspan fill="#bd4cff">RECOGNIZE</tspan><tspan fill="#6f6cba">  •  </tspan><tspan fill="#14d9dc">VALIDATE</tspan><tspan fill="#6f6cba">  •  </tspan><tspan fill="#a94cff">LOOKUP</tspan></text>
+<path d="M550 488h38M594 488h38M638 488h38" stroke="url(#road)" stroke-width="4"/>
+<!-- feature cards -->
+<g transform="translate(68 520)" font-family="Arial, sans-serif" text-anchor="middle">
+  <g><rect width="155" height="140" rx="22" fill="#071127" stroke="#2149aa" stroke-width="2"/><path d="M50 42V25h18M105 42V25H87M50 67v17h18M105 67v17H87" fill="none" stroke="#4d88ff" stroke-width="4"/><path d="M65 66l8-24h16l8 24z" fill="none" stroke="#41a6ff" stroke-width="3"/><text x="78" y="107" fill="white" font-size="15" font-weight="700">PLATE</text><text x="78" y="126" fill="white" font-size="15" font-weight="700">INTELLIGENCE</text></g>
+  <g transform="translate(181)"><rect width="155" height="140" rx="22" fill="#0d0a29" stroke="#6033ac" stroke-width="2"/><path d="M50 42V25h18M105 42V25H87M50 67v17h18M105 67v17H87" fill="none" stroke="#b44fff" stroke-width="4"/><text x="78" y="66" fill="#e46cff" font-size="37" font-weight="900">T</text><text x="78" y="107" fill="white" font-size="15" font-weight="700">TEXT</text><text x="78" y="126" fill="white" font-size="15" font-weight="700">RECOGNITION</text></g>
+  <g transform="translate(362)"><rect width="155" height="140" rx="22" fill="#061b27" stroke="#087a82" stroke-width="2"/><path d="M78 24l26 11v24q0 22-26 35-26-13-26-35V35z" fill="none" stroke="#21ddd6" stroke-width="4"/><path d="M65 57l9 9 18-22" fill="none" stroke="#20f0d9" stroke-width="4"/><text x="78" y="107" fill="white" font-size="15" font-weight="700">SMART</text><text x="78" y="126" fill="white" font-size="15" font-weight="700">VALIDATION</text></g>
+  <g transform="translate(543)"><rect width="155" height="140" rx="22" fill="#090b27" stroke="#3247a2" stroke-width="2"/><circle cx="70" cy="49" r="24" fill="none" stroke="#b151ff" stroke-width="4"/><circle cx="70" cy="49" r="9" fill="none" stroke="#29a7ff" stroke-width="4"/><path d="M88 67l22 22" stroke="#c95cff" stroke-width="5"/><text x="78" y="107" fill="white" font-size="15" font-weight="700">RTO / STATE</text><text x="78" y="126" fill="white" font-size="15" font-weight="700">LOOKUP</text></g>
+  <g transform="translate(724)"><rect width="155" height="140" rx="22" fill="#071126" stroke="#23499f" stroke-width="2"/><ellipse cx="78" cy="36" rx="27" ry="12" fill="none" stroke="#358fff" stroke-width="4"/><path d="M51 36v42c0 15 54 15 54 0V36M51 57c0 15 54 15 54 0" fill="none" stroke="#347cff" stroke-width="4"/><text x="78" y="107" fill="white" font-size="15" font-weight="700">LOCAL CSV</text><text x="78" y="126" fill="#9aa8c0" font-size="13">RTO DATA</text></g>
+  <g transform="translate(905)"><rect width="155" height="140" rx="22" fill="#160824" stroke="#742a91" stroke-width="2"/><path d="M88 22L52 64h23L64 91l40-48H82z" fill="none" stroke="#f052f1" stroke-width="4"/><text x="78" y="107" fill="white" font-size="15" font-weight="700">BOUNDED</text><text x="78" y="126" fill="white" font-size="15" font-weight="700">PIPELINE</text></g>
+</g>
 </svg>

@@ -1,22 +1,46 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="430" height="110" viewBox="0 0 430 110" role="img" aria-labelledby="title desc">
-  <title id="title">Number Plate AI logo</title>
-  <desc id="desc">A scanning frame around an Indian number plate beside the Number Plate AI wordmark</desc>
-  <defs>
-    <linearGradient id="scan" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#38bdf8"/>
-      <stop offset="1" stop-color="#34d399"/>
-    </linearGradient>
-  </defs>
-  <rect width="430" height="110" rx="18" fill="#071426"/>
-  <g transform="translate(8 12)">
-    <rect x="7" y="15" width="106" height="58" rx="10" fill="#f8fafc" stroke="#94a3b8" stroke-width="2"/>
-    <rect x="18" y="27" width="84" height="34" rx="5" fill="#e2e8f0" stroke="#0f172a" stroke-width="2"/>
-    <text x="60" y="50" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="800" letter-spacing="1" fill="#0f172a">IND AI</text>
-    <path d="M0 24V5h20M120 24V5h-20M0 64v19h20M120 64v19h-20" fill="none" stroke="url(#scan)" stroke-width="6" stroke-linecap="round"/>
-  </g>
-  <g transform="translate(145 25)" font-family="Arial, sans-serif">
-    <text x="0" y="32" font-size="34" font-weight="800" fill="#e2e8f0">Number Plate</text>
-    <text x="230" y="32" font-size="34" font-weight="800" fill="#38bdf8">AI</text>
-    <text x="2" y="58" font-size="14" font-weight="600" letter-spacing="2" fill="#94a3b8">LOCAL ANPR PIPELINE</text>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="760" viewBox="0 0 760 760" role="img" aria-labelledby="title desc">
+<title id="title">Number Plate AI</title><desc id="desc">Neon vehicle scanner logo for the local ANPR pipeline</desc>
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#010615"/><stop offset=".55" stop-color="#03091d"/><stop offset="1" stop-color="#071126"/></linearGradient>
+  <linearGradient id="blue" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#3b5cff"/><stop offset="1" stop-color="#00e7f0"/></linearGradient>
+  <linearGradient id="violet" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#275dff"/><stop offset=".55" stop-color="#7957ff"/><stop offset="1" stop-color="#00d9ee"/></linearGradient>
+  <radialGradient id="lens"><stop stop-color="#e9fbff"/><stop offset=".12" stop-color="#0a1734"/><stop offset=".38" stop-color="#2785ff"/><stop offset=".62" stop-color="#0b1238"/><stop offset=".82" stop-color="#5342eb"/><stop offset="1" stop-color="#060918"/></radialGradient>
+  <filter id="glow"><feGaussianBlur stdDeviation="7" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  <filter id="soft"><feGaussianBlur stdDeviation="18"/></filter>
+</defs>
+<rect width="760" height="760" rx="28" fill="url(#bg)"/>
+<ellipse cx="380" cy="331" rx="220" ry="60" fill="#0759e6" opacity=".16" filter="url(#soft)"/>
+<!-- scanner corners -->
+<g fill="none" stroke="url(#blue)" stroke-width="14" stroke-linecap="round" filter="url(#glow)">
+  <path d="M192 94v-28q0-28 28-28h44M568 94v-28q0-28-28-28h-44M192 294v28q0 28 28 28h44M568 294v28q0 28-28 28h-44"/>
+</g>
+<!-- vehicle -->
+<g stroke-linejoin="round">
+  <path d="M224 247l25-91q9-34 45-42l86-17 86 17q36 8 45 42l25 91-22 67H246z" fill="#081327" stroke="#e7f5ff" stroke-width="7"/>
+  <path d="M274 158q9-22 33-28l73-14 73 14q24 6 33 28l12 43H262z" fill="#020817" stroke="#daeaff" stroke-width="5"/>
+  <path d="M229 225l-21-18q-8-8 4-14l31 3 15 18M531 225l21-18q8-8-4-14l-31 3-15 18" fill="#e9f3ff" stroke="#d9ecff" stroke-width="4"/>
+  <path d="M247 231l99 10-42 25-61-9zM513 231l-99 10 42 25 61-9z" fill="#f8fdff" stroke="#3d8dff" stroke-width="5" filter="url(#glow)"/>
+  <path d="M260 304q120 42 240 0" fill="none" stroke="#087df5" stroke-width="5"/>
+</g>
+<!-- camera lens -->
+<g transform="translate(380 215)" filter="url(#glow)">
+  <circle r="69" fill="#071126" stroke="#3a7dff" stroke-width="10"/><circle r="52" fill="url(#lens)" stroke="#2539ab" stroke-width="7"/><circle r="31" fill="#02040f" stroke="#147ee8" stroke-width="6"/><circle cx="11" cy="-14" r="11" fill="#effcff"/><circle cx="14" cy="-18" r="4" fill="white"/>
+</g>
+<!-- plate -->
+<g transform="translate(236 286)">
+  <rect width="288" height="91" rx="15" fill="#061025" stroke="#dcecff" stroke-width="7"/><rect x="10" y="10" width="268" height="71" rx="9" fill="#f5f7fb" stroke="#73839b" stroke-width="2"/>
+  <rect x="12" y="12" width="51" height="67" rx="7" fill="#123fa9"/><circle cx="37" cy="29" r="12" fill="none" stroke="#d8e9ff" stroke-width="2" stroke-dasharray="2 2"/><text x="37" y="63" text-anchor="middle" font-family="Arial" font-size="17" font-weight="700" fill="white">IND</text>
+  <text x="171" y="58" text-anchor="middle" font-family="Arial" font-size="39" font-weight="900" letter-spacing="8" fill="#081020">* * * * *</text>
+</g>
+<!-- wordmark -->
+<text x="380" y="478" text-anchor="middle" font-family="Arial, sans-serif" font-size="66" font-weight="900" fill="#f8fafc">Number Plate <tspan fill="#05bff4">AI</tspan></text>
+<path d="M125 519h92M543 519h92" stroke="url(#blue)" stroke-width="4"/><text x="380" y="527" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" letter-spacing="8" fill="#9ca9c1">LOCAL ANPR PIPELINE</text>
+<!-- feature row -->
+<g transform="translate(62 580)" font-family="Arial, sans-serif" text-anchor="middle">
+  <g transform="translate(78)"><rect x="-26" y="-4" width="52" height="42" rx="9" fill="none" stroke="#2c76ff" stroke-width="4"/><path d="M-33 7v-17h17M33 7v-17H16M-33 28v17h17M33 28v17H16" fill="none" stroke="#26b7ff" stroke-width="4"/><text y="70" fill="white" font-size="17" font-weight="700">ANPR</text><text y="92" fill="#8491aa" font-size="14">Detection</text></g>
+  <path d="M160-2v102M320-2v102M480-2v102" stroke="#28334d"/>
+  <g transform="translate(238)"><path d="M-29 7v-17h17M29 7v-17H12M-29 28v17h17M29 28v17H12" fill="none" stroke="#7655ff" stroke-width="4"/><text y="27" fill="#b05cff" font-size="24" font-weight="900">OCR</text><text y="70" fill="white" font-size="17" font-weight="700">OCR</text><text y="92" fill="#8491aa" font-size="14">Recognition</text></g>
+  <g transform="translate(398)"><path d="M0-13l28 11v24q0 25-28 37-28-12-28-37V-2z" fill="none" stroke="#08d8d5" stroke-width="4"/><path d="M-11 20l8 8 15-20" fill="none" stroke="#24efd8" stroke-width="4"/><text y="70" fill="white" font-size="17" font-weight="700">Registration</text><text y="92" fill="#8491aa" font-size="14">Validation</text></g>
+  <g transform="translate(558)"><path d="M0-13a25 25 0 0 1 25 25c0 20-25 46-25 46S-25 32-25 12A25 25 0 0 1 0-13z" fill="none" stroke="#6c55ff" stroke-width="4"/><circle cy="12" r="8" fill="none" stroke="#168eff" stroke-width="4"/><text y="70" fill="white" font-size="17" font-weight="700">RTO / State</text><text y="92" fill="#8491aa" font-size="14">Lookup</text></g>
+</g>
 </svg>
